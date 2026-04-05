@@ -15,6 +15,9 @@
 
 #define LOG_TAG "[deletescript]"
 
+/* Root filesystem access requires the jailbroken AFC2 service */
+#define AFC2_SERVICE_NAME      "com.apple.afc2"
+
 #define SETUP_APP_PATH         "/Applications/Setup.app"
 #define SETUP_APP_BAK          "/Applications/Setup.app.bak"
 #define PURPLEBUDDY_PLIST      "/private/var/mobile/Library/Preferences/com.apple.purplebuddy.plist"
@@ -30,10 +33,16 @@ int deletescript_parse_version(const char *version_str, ios_version_t *ver)
         return -1;
     }
     memset(ver, 0, sizeof(*ver));
-    n = sscanf(version_str, "%d.%d.%d",
+    n = sscanf(version_str, "%u.%u.%u",
                &ver->ios_major, &ver->ios_minor, &ver->ios_patch);
     if (n < 1) {
         log_error("%s Cannot parse version: '%s'", LOG_TAG, version_str);
+        return -1;
+    }
+    /* Sanity check: major must be positive and reasonable */
+    if (ver->ios_major == 0 || ver->ios_major >= 100) {
+        log_error("%s Unreasonable iOS version: %u.%u.%u",
+                  LOG_TAG, ver->ios_major, ver->ios_minor, ver->ios_patch);
         return -1;
     }
     return 0;
@@ -77,7 +86,7 @@ int deletescript_remove_setup_app(device_info_t *dev)
 
     if (!dev) { log_error("%s NULL device", LOG_TAG); return -1; }
 
-    if (afc_connect(dev, &afc) < 0)
+    if (afc_connect_service(dev, &afc, AFC2_SERVICE_NAME) < 0)
         return -1;
 
     if (afc_file_exists(afc, SETUP_APP_PATH) != 1) {
@@ -118,7 +127,7 @@ int deletescript_set_purplebuddy_done(device_info_t *dev)
 
     if (!dev) { log_error("%s NULL device", LOG_TAG); return -1; }
 
-    if (afc_connect(dev, &afc) < 0)
+    if (afc_connect_service(dev, &afc, AFC2_SERVICE_NAME) < 0)
         return -1;
 
     if (afc_write_file(afc, PURPLEBUDDY_PLIST,
@@ -139,7 +148,7 @@ int deletescript_purge_activation_records(device_info_t *dev)
     int total = 0, n;
 
     if (!dev) { log_error("%s NULL device", LOG_TAG); return -1; }
-    if (afc_connect(dev, &afc) < 0)
+    if (afc_connect_service(dev, &afc, AFC2_SERVICE_NAME) < 0)
         return -1;
 
     n = purge_directory(afc, ACT_RECORDS_ROOT);
@@ -158,7 +167,7 @@ int deletescript_clear_caches(device_info_t *dev)
     int n;
 
     if (!dev) { log_error("%s NULL device", LOG_TAG); return -1; }
-    if (afc_connect(dev, &afc) < 0)
+    if (afc_connect_service(dev, &afc, AFC2_SERVICE_NAME) < 0)
         return -1;
 
     n = purge_directory(afc, CACHE_DIR_PURPLEBUDDY);
@@ -184,7 +193,7 @@ int deletescript_run(device_info_t *dev)
         ver.ios_major = 0;
     }
 
-    log_info("%s Running deletescript for iOS %d.%d.%d on %s",
+    log_info("%s Running deletescript for iOS %u.%u.%u on %s",
              LOG_TAG, ver.ios_major, ver.ios_minor, ver.ios_patch,
              dev->product_type);
 
@@ -194,10 +203,11 @@ int deletescript_run(device_info_t *dev)
     if (deletescript_purge_activation_records(dev) < 0)  errors++;
     if (deletescript_clear_caches(dev) < 0)              errors++;
 
-    if (errors > 0)
-        log_warn("%s Completed with %d warning(s)", LOG_TAG, errors);
-    else
-        log_info("%s Deletescript completed successfully", LOG_TAG);
+    if (errors > 0) {
+        log_warn("%s Completed with %d error(s)", LOG_TAG, errors);
+        return -1;
+    }
 
+    log_info("%s Deletescript completed successfully", LOG_TAG);
     return 0;
 }

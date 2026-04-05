@@ -225,14 +225,22 @@ int session_create_activation_info(device_info_t *dev,
      * HandshakeResponseMessage, serverKP) plus options:
      *   BasebandWaitCount = 90 (retry count for baseband check)
      * Device returns the activation information plist.
+     *
+     * Copy the handshake_response so we don't mutate the caller's plist.
      */
+    plist_t hs_copy = plist_copy(handshake_response);
+    if (!hs_copy) {
+        log_error("%s Failed to copy handshake_response", LOG_TAG);
+        mobileactivation_client_free(ma);
+        return -1;
+    }
 
-    /* Inject BasebandWaitCount option into handshake_response */
-    plist_dict_set_item(handshake_response, "BasebandWaitCount",
+    plist_dict_set_item(hs_copy, "BasebandWaitCount",
                         plist_new_uint(BASEBAND_WAIT_COUNT));
 
     err = mobileactivation_create_activation_info_with_session(
-            ma, handshake_response, activation_info);
+            ma, hs_copy, activation_info);
+    plist_free(hs_copy);
     mobileactivation_client_free(ma);
 
     if (err != MOBILEACTIVATION_E_SUCCESS || !*activation_info) {

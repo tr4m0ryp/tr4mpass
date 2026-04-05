@@ -12,9 +12,9 @@
 #include "device/device.h"
 
 typedef struct {
-    int ios_major;
-    int ios_minor;
-    int ios_patch;
+    unsigned int ios_major;
+    unsigned int ios_minor;
+    unsigned int ios_patch;
 } ios_version_t;
 
 /*

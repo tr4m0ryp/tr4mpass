@@ -11,21 +11,22 @@
 #include "bypass/afc_utils.h"
 #include "util/log.h"
 
-int afc_connect(device_info_t *dev, afc_client_t *client)
+int afc_connect_service(device_info_t *dev, afc_client_t *client,
+                        const char *service_name)
 {
     lockdownd_service_descriptor_t svc = NULL;
     lockdownd_error_t lerr;
     afc_error_t aerr;
 
-    if (!dev || !dev->lockdown || !client) {
-        log_error("[afc] Invalid arguments to afc_connect");
+    if (!dev || !dev->lockdown || !client || !service_name) {
+        log_error("[afc] Invalid arguments to afc_connect_service");
         return -1;
     }
 
-    lerr = lockdownd_start_service(dev->lockdown, AFC_SERVICE_NAME, &svc);
+    lerr = lockdownd_start_service(dev->lockdown, service_name, &svc);
     if (lerr != LOCKDOWN_E_SUCCESS || !svc) {
-        log_error("[afc] Could not start AFC service: %s",
-                  lockdownd_strerror(lerr));
+        log_error("[afc] Could not start service '%s': %s",
+                  service_name, lockdownd_strerror(lerr));
         return -1;
     }
 
@@ -38,6 +39,11 @@ int afc_connect(device_info_t *dev, afc_client_t *client)
     }
 
     return 0;
+}
+
+int afc_connect(device_info_t *dev, afc_client_t *client)
+{
+    return afc_connect_service(dev, client, AFC_SERVICE_NAME);
 }
 
 void afc_disconnect(afc_client_t client)

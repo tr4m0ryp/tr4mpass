@@ -25,8 +25,9 @@ int activation_get_state(device_info_t *dev, char *buf, size_t buf_len);
 
 /*
  * activation_get_session_info -- Retrieve the DRM handshake session blob.
- * On success, *blob_xml is set to a malloc'd XML string and *blob_len to
- * its length. Caller must free(*blob_xml).
+ * On success, *blob_xml is set to an XML string and *blob_len to its length.
+ * The string is allocated by libplist; caller must free with plist_mem_free(),
+ * NOT free() or plist_free().
  * Returns 0 on success, -1 on error.
  */
 int activation_get_session_info(device_info_t *dev,
@@ -34,8 +35,9 @@ int activation_get_session_info(device_info_t *dev,
 
 /*
  * activation_get_info -- Retrieve full activation info from the device.
- * On success, *info_xml is set to a malloc'd XML string and *info_len to
- * its length. Caller must free(*info_xml).
+ * On success, *info_xml is set to an XML string and *info_len to its length.
+ * The string is allocated by libplist; caller must free with plist_mem_free(),
+ * NOT free() or plist_free().
  * Returns 0 on success, -1 on error.
  */
 int activation_get_info(device_info_t *dev,

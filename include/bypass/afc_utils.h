@@ -15,7 +15,18 @@
 #include "device/device.h"
 
 /*
- * afc_connect -- Start the AFC service and return a client handle.
+ * afc_connect_service -- Start an AFC service by name and return a client.
+ * Use "com.apple.afc" for sandboxed access (/var/mobile/Media/) or
+ * "com.apple.afc2" for full root filesystem access (jailbroken).
+ * Caller must call afc_disconnect() when done.
+ * Returns 0 on success, -1 on error.
+ */
+int afc_connect_service(device_info_t *dev, afc_client_t *client,
+                        const char *service_name);
+
+/*
+ * afc_connect -- Start the default AFC service ("com.apple.afc").
+ * Convenience wrapper around afc_connect_service().
  * Caller must call afc_disconnect() when done.
  * Returns 0 on success, -1 on error.
  */
