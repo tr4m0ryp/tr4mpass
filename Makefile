@@ -9,6 +9,8 @@ PKG_LIBS = libimobiledevice-1.0 libirecovery-1.0 libusb-1.0 \
 CFLAGS  += $(shell pkg-config --cflags $(PKG_LIBS) 2>/dev/null)
 LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
 
+$(foreach lib,$(PKG_LIBS),$(if $(shell pkg-config --exists $(lib) 2>/dev/null && echo ok),,$(warning Library $(lib) not found by pkg-config)))
+
 # Auto-discover all C sources under src/
 SRCS     = $(shell find src -name '*.c')
 OBJS     = $(SRCS:.c=.o)

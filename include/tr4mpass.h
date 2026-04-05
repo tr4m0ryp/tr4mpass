@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TR4MPASS_VERSION "0.1.0"
+#define TR4MPASS_VERSION "0.2.0"
 
 #define TR4MPASS_OK   0
 #define TR4MPASS_ERR -1

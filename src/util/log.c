@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <unistd.h>
 #include "util/log.h"
 
 #define ANSI_RESET  "\033[0m"
@@ -8,7 +9,15 @@
 #define ANSI_YELLOW "\033[33m"
 #define ANSI_RED    "\033[31m"
 
-static log_level_t g_level = LOG_INFO;
+static log_level_t g_level   = LOG_INFO;
+static int         g_use_color = -1;  /* -1 = uninitialized */
+
+static int should_use_color(void)
+{
+    if (g_use_color == -1)
+        g_use_color = isatty(STDERR_FILENO);
+    return g_use_color;
+}
 
 void log_set_level(log_level_t level)
 {
@@ -20,9 +29,15 @@ static void log_vprint(log_level_t level, const char *color,
 {
     if (level < g_level)
         return;
-    fprintf(stderr, "%s%s ", color, tag);
+    if (should_use_color())
+        fprintf(stderr, "%s%s ", color, tag);
+    else
+        fprintf(stderr, "%s ", tag);
     vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "%s\n", ANSI_RESET);
+    if (should_use_color())
+        fprintf(stderr, "%s\n", ANSI_RESET);
+    else
+        fprintf(stderr, "\n");
 }
 
 void log_debug(const char *fmt, ...)
