@@ -1,0 +1,37 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+itr4m
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.xcodeproj/
+*.xcworkspace/
+
+# Secrets and credentials
+.env
+.env.*
+*.key
+*.pem
+*.p12
+credentials.*
+
+# Python (if any helper scripts)
+__pycache__/
+*.pyc
+.venv/
+
+# Debug
+*.dSYM/
+core
+core.*
