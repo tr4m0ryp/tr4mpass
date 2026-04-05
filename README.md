@@ -1,346 +1,253 @@
-# tr4mpass: Open-Source iOS Activation Lock Bypass Tool
+# tr4mpass: iCloud Activation Lock Bypass
 
-tr4mpass is a terminal-based C tool that removes iCloud activation lock from
-iOS devices locally. No third-party servers, no paid services, no account
-credentials required. Everything runs on your machine over a USB cable.
+Free, open-source tool that removes iCloud activation lock from iPhones and iPads. Runs locally on your computer -- no servers, no payments, no accounts needed. Just plug in your device and run.
 
-Built for **Apple Security Bounty** research. Target: **iOS <= 26.1**.
+**Supports iOS 12 through 26.1 | iPhone 5s through iPhone 15 Pro**
 
 ---
 
-## The Problem
+## How to Use
 
-An **activation lock** is Apple's anti-theft mechanism tied to iCloud. When
-enabled, the device demands the original owner's Apple ID before it can be
-used. This is useful when a device is stolen. It is not useful when:
+### 1. Download
 
-- You bought a used device and the seller forgot to remove the lock.
-- You are a security researcher testing iOS activation infrastructure.
-- You work in IT asset recovery or device refurbishment.
-- You inherited a device and cannot contact the original owner.
-
-Apple offers no self-service path for these cases. Their official process
-requires proof of purchase and an appointment at an Apple Store, which may
-not exist in your country, and frequently results in rejection.
-
-tr4mpass provides a **local, offline bypass** that works without contacting
-Apple or any third party.
-
----
-
-## How It Works
-
-```
-Connect Device --> Detect Chip --> Enter DFU --> Exploit --> Bypass --> Verify
+```bash
+git clone https://github.com/tr4m0ryp/tr4mpass.git
+cd tr4mpass
 ```
 
-tr4mpass supports two bypass paths, selected automatically based on the
-device's SoC:
+### 2. Run
 
-**Path A -- checkm8 (A5 through A11)**
+```bash
+./start.sh
+```
 
-Uses a permanent, unfixable hardware vulnerability in the BootROM
-(checkm8) to gain code execution at the lowest level. From there, it loads
-a ramdisk, applies a jailbreak, injects a local activation record, runs
-cleanup, and verifies the lock is removed. Apple cannot patch this because
-the BootROM is read-only silicon.
+That's it. The script will:
+- Install everything needed (works on macOS, Linux, and Windows via WSL)
+- Build the tool automatically
+- Detect your device when you plug it in
+- Guide you into DFU mode step by step
+- Run the bypass
+- Tell you when it's done
 
-Chain: `DFU -> checkm8 exploit -> ramdisk -> jailbreak -> activation
-record injection -> deletescript cleanup -> verify`
+### 3. Put Your Device in DFU Mode
 
-**Path B -- Session Activation (A12 and later)**
+The script will walk you through this, but here's the short version:
 
-Does not use a BootROM exploit. Instead, it manipulates the device's
-identity descriptors in DFU mode, detects signal type (cellular vs
-WiFi-only), then uses the drmHandshake session-mode activation protocol to
-change the lock state. Runs cleanup and verifies.
+**iPhone 7 and older (Home button):**
+1. Connect to your computer via USB
+2. Hold Power + Home for 10 seconds
+3. Release Power, keep holding Home for 5 more seconds
+4. Screen should be completely black (no Apple logo)
 
-Chain: `DFU -> identity manipulation -> signal detection -> drmHandshake
-session activation -> deletescript cleanup -> verify`
+**iPhone 8, X, and newer (Face ID / no Home button):**
+1. Connect to your computer via USB
+2. Quick-press Volume Up, quick-press Volume Down
+3. Hold Side button until screen goes black
+4. Hold Side + Volume Down for 5 seconds
+5. Release Side, keep holding Volume Down for 10 seconds
+6. Screen should be completely black
 
 ---
 
 ## Supported Devices
 
-### Path A -- checkm8 Devices (A5 through A11)
+### iPhone
 
-These devices have a permanent BootROM vulnerability. Fully supported.
+| Device | Chip | Bypass Method | Signal Preserved |
+|--------|------|---------------|------------------|
+| iPhone 5s | A7 | Path A (checkm8) | No (WiFi only) |
+| iPhone 6 / 6 Plus | A8 | Path A (checkm8) | No (WiFi only) |
+| iPhone 6s / 6s Plus | A9 | Path A (checkm8) | Yes |
+| iPhone SE (1st gen) | A9 | Path A (checkm8) | Yes |
+| iPhone 7 / 7 Plus | A10 | Path A (checkm8) | Yes |
+| iPhone 8 / 8 Plus | A11 | Path A (checkm8) | Yes |
+| iPhone X | A11 | Path A (checkm8) | Yes |
+| iPhone XR | A12 | Path B (session) | Yes |
+| iPhone XS / XS Max | A12 | Path B (session) | Yes |
+| iPhone 11 / Pro / Pro Max | A13 | Path B (session) | Yes |
+| iPhone SE (2nd gen) | A13 | Path B (session) | Yes |
+| iPhone 12 / Mini / Pro / Pro Max | A14 | Path B (session) | Yes |
+| iPhone 13 / Mini / Pro / Pro Max | A15 | Path B (session) | Yes |
+| iPhone SE (3rd gen) | A15 | Path B (session) | Yes |
+| iPhone 14 / Plus | A15 | Path B (session) | Yes |
+| iPhone 14 Pro / Pro Max | A16 | Path B (session) | Yes |
+| iPhone 15 / Plus | A16 | Path B (session) | Yes |
+| iPhone 15 Pro / Pro Max | A17 | Path B (session) | Yes |
 
-| Chip | CPID | Devices | Notes |
-|------|------|---------|-------|
-| A7 | 0x8947 | iPhone 5s, iPad Air | ARMv7 payload |
-| A9 (TSMC) | 0x8000 | iPhone 6s, iPhone SE | ARM64 |
-| A9 (Samsung) | 0x8003 | iPhone 6s (Samsung variant) | ARM64 |
-| A9 | 0x8950 | Apple TV (3rd gen) | ARMv7 payload |
-| A9 | 0x8955 | Apple TV (3rd gen, rev A) | ARMv7 payload |
-| S1P | 0x7002 | Apple Watch Series 1/2 | ARMv7 payload |
-| S3 | 0x8002 | Apple Watch Series 3 | ARMv7, ROP (hole=5) |
-| S3 | 0x8004 | Apple Watch Series 3 (GPS+Cellular) | ARMv7, ROP (hole=5) |
-| A8 | 0x7000 | iPod touch 6G, iPad mini 4 | ARM64 |
-| A8X | 0x7001 | iPad Air 2 | ARM64 |
-| A9X | 0x8001 | iPad Pro (1st gen) | ARM64, ROP gadgets |
-| A10 | 0x8960 | iPhone 7, iPhone 7 Plus | ARM64, large leak |
-| A10 | 0x8010 | iPhone 7, iPod touch 7G | ARM64, ROP gadgets |
-| A10X | 0x8011 | iPad Pro 10.5", Apple TV 4K | ARM64, ROP gadgets |
-| A11 | 0x8015 | iPhone 8, iPhone 8 Plus, iPhone X | ARM64, ROP gadgets |
-| T2 | 0x8012 | Apple T2 Security Chip | ARM64, ROP gadgets |
+### iPad
 
-### Path B -- Session Activation Devices (A12 and later)
+| Device | Chip | Bypass Method |
+|--------|------|---------------|
+| iPad Air | A7 | Path A (checkm8) |
+| iPad Air 2 | A8X | Path A (checkm8) |
+| iPad mini 4 | A8 | Path A (checkm8) |
+| iPad Pro (1st gen) | A9X | Path A (checkm8) |
+| iPad (5th-7th gen) | A9-A10 | Path A (checkm8) |
+| iPad Pro (2nd gen) | A10X | Path A (checkm8) |
+| iPad Pro (3rd/4th gen) | A12/A12Z | Path B (session) |
+| iPad Air (4th/5th gen) | A14/M1 | Path B (session) |
+| iPad Pro (5th/6th gen) | M1/M2 | Path B (session) |
 
-These devices are NOT checkm8-vulnerable. Bypass uses identity
-manipulation and session-mode activation instead.
+### Other
 
-| Chip | CPID | Devices | Status |
-|------|------|---------|--------|
-| A12 | 0x8020 | iPhone XS, iPhone XR | Supported |
-| A12Z | 0x8027 | iPad Pro (4th gen) | Supported |
-| A13 | 0x8030 | iPhone 11, iPhone 11 Pro | Supported |
-| A14 | 0x8101 | iPhone 12, iPad Air (4th gen) | Supported |
-| M1 | 0x8103 | iPad Pro (5th gen), MacBook (M1) | Supported |
-| A15 | 0x8110 | iPhone 13, iPhone SE (3rd gen) | Supported |
-| M2 | 0x8112 | iPad Pro (6th gen), MacBook (M2) | Supported |
-| A16 | 0x8120 | iPhone 14 Pro, iPhone 14 Pro Max | Supported |
-| A17 | 0x8130 | iPhone 15 Pro, iPhone 15 Pro Max | Supported |
+| Device | Chip | Bypass Method |
+|--------|------|---------------|
+| iPod touch (6th gen) | A8 | Path A (checkm8) |
+| iPod touch (7th gen) | A10 | Path A (checkm8) |
+| Apple TV 4K (1st gen) | A10X | Path A (checkm8) |
+| Apple Watch Series 1-3 | S1P/S3 | Path A (checkm8) |
 
 ---
 
-## Quick Start
+## What Does "Signal Preserved" Mean?
 
-The fastest way to get started is the guided wrapper script, which handles
-dependency installation, building, device detection, DFU guidance, and
-bypass execution:
+- **Yes** -- After bypass, your iPhone keeps full cellular service (calls, texts, data). SIM card works normally.
+- **No (WiFi only)** -- After bypass, the device works on WiFi but cellular service is disabled. This applies to older devices (A7/A8) and all WiFi-only iPads.
+
+---
+
+## Advanced Usage
+
+If you prefer to run things manually instead of using `start.sh`:
 
 ```bash
-git clone https://github.com/tr4m0ryp/tr4mpass.git
-cd tr4mpass
-./start.sh
+# Build
+make
+
+# Just identify your device (no bypass)
+./tr4mpass --detect-only
+
+# Run with full debug output
+./tr4mpass --verbose
+
+# Force a specific bypass path
+./tr4mpass --force-path-a    # checkm8 (A5-A11 devices)
+./tr4mpass --force-path-b    # session activation (A12+ devices)
+
+# Preview what would happen without doing it
+./tr4mpass --dry-run
 ```
 
-The script auto-detects your OS and installs everything needed.
-
 <details>
-<summary>Manual Install -- macOS</summary>
-
-Requires Homebrew.
+<summary>Manual dependency install -- macOS</summary>
 
 ```bash
 brew install libimobiledevice libirecovery libusb libplist openssl pkg-config
-git clone https://github.com/tr4m0ryp/tr4mpass.git
-cd tr4mpass
-make
 ```
 
 </details>
 
 <details>
-<summary>Manual Install -- Linux (Debian/Ubuntu)</summary>
+<summary>Manual dependency install -- Linux (Debian/Ubuntu)</summary>
 
 ```bash
-sudo apt-get update
 sudo apt-get install -y \
     libimobiledevice-dev libirecovery-dev libusb-1.0-0-dev \
     libplist-dev libssl-dev pkg-config build-essential
-
-git clone https://github.com/tr4m0ryp/tr4mpass.git
-cd tr4mpass
-make
 ```
 
 </details>
 
 <details>
-<summary>Manual Install -- Linux (Fedora/RHEL)</summary>
+<summary>Manual dependency install -- Linux (Fedora)</summary>
 
 ```bash
 sudo dnf install -y \
     libimobiledevice-devel libirecovery-devel libusb1-devel \
     libplist-devel openssl-devel pkg-config gcc make
-
-git clone https://github.com/tr4m0ryp/tr4mpass.git
-cd tr4mpass
-make
 ```
 
 </details>
 
 <details>
-<summary>Manual Install -- Windows (via WSL)</summary>
+<summary>Windows</summary>
 
-Native Windows is not supported. Use Windows Subsystem for Linux.
+Native Windows is not supported. Install WSL first:
 
 ```powershell
 wsl --install
 ```
 
-Then open a WSL terminal and follow the Linux (Debian/Ubuntu) instructions
-above.
+Then open a WSL terminal and follow the Linux instructions.
 
 </details>
 
 ---
 
-## Usage
+## How It Works (Technical)
 
-### Guided Mode (Recommended)
+tr4mpass has two bypass paths, selected automatically based on your device's chip:
 
-```bash
-./start.sh
+### Path A -- checkm8 (A5 through A11)
+
+Uses a permanent hardware vulnerability in the BootROM (the very first code that runs when the device powers on). This vulnerability cannot be patched by Apple because the BootROM is burned into silicon at the factory.
+
+```
+DFU Mode -> checkm8 exploit -> load ramdisk -> jailbreak kernel
+-> inject activation record -> cleanup Setup.app -> verify
 ```
 
-The script walks you through the entire process: connects to your device,
-identifies the chip, guides you into DFU mode if needed, selects the
-correct bypass path, and executes it.
+### Path B -- Session Activation (A12 and later)
 
-### Direct CLI
+Does not use a hardware exploit. Instead, it manipulates the device's identity in DFU mode, then uses Apple's own activation protocol (drmHandshake session mode) to change the lock state.
 
-```bash
-./tr4mpass                   # Auto-detect device and bypass path
-./tr4mpass --detect-only     # Identify the device and exit
-./tr4mpass --verbose         # Full debug output
-./tr4mpass --force-path-a    # Force checkm8 path (A5-A11)
-./tr4mpass --force-path-b    # Force session path (A12+)
-./tr4mpass --dry-run         # Show what would happen without executing
-./tr4mpass --help            # Show all options
+```
+DFU Mode -> identity manipulation -> signal detection
+-> session handshake -> activation record -> cleanup -> verify
 ```
 
-### CLI Options
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--verbose` | `-v` | Enable debug-level logging |
-| `--dry-run` | `-n` | Print the selected module without executing |
-| `--detect-only` | `-d` | Detect and print device info, then exit |
-| `--force-path-a` | `-a` | Force Path A (checkm8) regardless of chip |
-| `--force-path-b` | `-b` | Force Path B (session) regardless of chip |
-| `--help` | `-h` | Print usage information |
-
----
-
-## Architecture
+### Architecture
 
 ```
 +-------------------------+
 |        start.sh         |  Guided wrapper (OS detect, deps, DFU guide)
 +-------------------------+
-|         main.c          |  CLI parsing, device detect, module select
+|         main.c          |  CLI, device detection, path selection
 +-------------------------+
-|  Path A    |   Path B   |  Bypass strategy modules
+|  Path A    |   Path B   |  Bypass strategies
 +------------+------------+
-| checkm8    | identity   |  Exploit / manipulation layer
-| jailbreak  | session    |  Activation protocol layer
+| checkm8    | identity   |  Exploit / manipulation
+| jailbreak  | session    |  Activation protocol
 +------------+------------+
-| activation | record     |  Activation record handling
-+------------+------------+
-| dfu_proto  | usb_dfu    |  USB/DFU protocol layer
-+------------+------------+
-| libusb | libimobiledevice | libplist | OpenSSL |  Dependencies
-+--------+------------------+---------+---------+
+| DFU protocol | activation record | deletescript |
++--------------+-------------------+--------------+
+| libusb | libimobiledevice | libplist | OpenSSL  |
++--------+------------------+---------+----------+
 ```
 
-### Module Map
+### Source Files
 
-| Module | Header | Source | Purpose |
-|--------|--------|--------|---------|
-| Core | `include/tr4mpass.h` | `src/main.c` | Version, entry point, orchestration |
-| Bypass Framework | `include/bypass/bypass.h` | `src/bypass/bypass.c` | Plugin registry, module selection |
-| Path A | `include/bypass/path_a.h` | `src/bypass/path_a.c`, `path_a_jailbreak.c` | checkm8 chain (A5-A11) |
-| Path B | `include/bypass/path_b.h` | `src/bypass/path_b.c`, `path_b_identity.c` | Session activation (A12+) |
-| Signal | `include/bypass/signal.h` | `src/bypass/signal.c` | Cellular vs WiFi-only detection |
-| Deletescript | `include/bypass/deletescript.h` | `src/bypass/deletescript.c` | Post-bypass cleanup |
-| AFC Utils | `include/bypass/afc_utils.h` | `src/bypass/afc_utils.c` | Apple File Conduit helpers |
-| Device | `include/device/device.h` | `src/device/device.c` | Device detection and info |
-| USB DFU | `include/device/usb_dfu.h` | `src/device/usb_dfu.c` | DFU mode USB communication |
-| Chip DB | `include/device/chip_db.h` | `src/device/chip_db.c` | SoC lookup table (A5-A17) |
-| checkm8 | `include/exploit/checkm8.h` | `src/exploit/checkm8.c`, `checkm8_stages.c`, `checkm8_patch.c`, `checkm8_payload.c` | BootROM exploit implementation |
-| DFU Proto | `include/exploit/dfu_proto.h` | `src/exploit/dfu_proto.c` | DFU protocol operations |
-| Activation | `include/activation/activation.h` | `src/activation/activation.c` | Activation flow orchestration |
-| Session | `include/activation/session.h` | `src/activation/session.c` | drmHandshake session mode |
-| Record | `include/activation/record.h` | `src/activation/record.c` | Activation record construction |
-| Logging | `include/util/log.h` | `src/util/log.c` | Leveled logging |
-| Plist | `include/util/plist_helpers.h` | `src/util/plist_helpers.c` | libplist convenience wrappers |
-| USB | `include/util/usb_helpers.h` | `src/util/usb_helpers.c` | libusb convenience wrappers |
+The codebase is written in C99 (21 source files, 20 headers). Every file is under 300 lines. The Makefile auto-discovers all sources -- no manual file lists.
+
+| Module | What it does |
+|--------|-------------|
+| `src/main.c` | Entry point, CLI args, orchestration |
+| `src/device/` | Device detection (USB + libimobiledevice), chip database (A5-A17) |
+| `src/exploit/` | checkm8 exploit stages, DFU protocol, payload assembly |
+| `src/bypass/` | Path A, Path B, signal detection, deletescript, AFC utils |
+| `src/activation/` | Activation client, session protocol, record builder |
+| `src/util/` | Logging, plist helpers, USB helpers |
 
 ---
 
-## Signal vs No-Signal
+## iOS 26.3+ (Research in Progress)
 
-tr4mpass detects whether a device has cellular capability (GSM, CDMA, or
-dual-mode) based on IMEI and MEID fields.
+Current bypass methods work up to iOS 26.1. For iOS 26.2 and later, Apple hardened several security layers that break existing approaches.
 
-- **Cellular devices** (iPhone, iPad Cellular): The bypass preserves cell
-  service. After bypass, the device functions normally with full cellular
-  connectivity.
+We have identified a potential bypass vector through **VU#346053** -- an unpatched vulnerability in Apple's activation server that accepts unsigned XML payloads. This could enable bypass via a captive portal during device setup, without needing any exploit or jailbreak.
 
-- **WiFi-only devices** (iPad WiFi, iPod touch): The bypass removes the
-  activation lock for WiFi usage. There is no cellular radio to preserve.
-
-Signal detection is automatic. The `signal_detect_type()` function
-classifies the device and the bypass path adjusts its activation record
-strategy accordingly.
-
----
-
-## iOS 26.3+ Research
-
-**Status: NOT IMPLEMENTED -- research only.**
-
-Current bypass paths (A and B) work on iOS versions up to 26.1. Starting
-with iOS 26.2, Apple hardened server-mandatory activation, MEID-based
-record signing, Secure Enclave activation state, and code signing
-enforcement in ways that break existing techniques.
-
-A potential bypass vector for iOS 26.2+ has been identified through
-**VU#346053** -- an unpatched XML payload injection vulnerability in
-Apple's activation endpoint (`humb.apple.com/humbug/baa`), discovered by
-security researcher JGoyd and reported to Apple and US-CERT in May 2025.
-As of April 2026, it remains unpatched.
-
-This would operate as a **Path C** in tr4mpass's architecture, using a
-captive portal / rogue access point to inject crafted XML provisioning
-payloads during the Setup Assistant phase. No jailbreak or BootROM exploit
-required.
-
-See `26.3-vulnerability.md` for technical details, proposed attack chain,
-security layer analysis, and implementation roadmap.
-
----
-
-## Building from Source
-
-Requirements:
-- C99 compiler (GCC or Clang)
-- pkg-config
-- libimobiledevice (>= 1.0)
-- libirecovery (>= 1.0)
-- libusb (>= 1.0)
-- libplist (>= 2.0)
-- OpenSSL
-
-```bash
-make          # Build
-make clean    # Remove build artifacts
-```
-
-The Makefile auto-discovers all `.c` files under `src/` via `find`. No
-manual source list maintenance needed. Headers are included from
-`include/` via `-Iinclude`. Library flags are resolved through pkg-config.
+**This is not implemented yet.** See [`26.3-vulnerability.md`](26.3-vulnerability.md) for the full technical analysis, proposed attack chain, and implementation roadmap.
 
 ---
 
 ## Disclaimer
 
-This tool is developed for **authorized security research only**, in the
-context of Apple's Security Bounty program. It is intended to demonstrate
-and document vulnerabilities in iOS activation infrastructure.
+This tool is for **authorized security research only** (Apple Security Bounty program).
 
-- Only use this tool on devices you personally own or have explicit written
-  authorization to test.
-- Bypassing activation lock on stolen devices is illegal in most
-  jurisdictions.
-- The authors are not responsible for misuse of this tool.
-- No warranty of any kind is provided. Use at your own risk.
-- This tool does not guarantee a successful bypass on every device or iOS
-  version.
+- Only use on devices you own or have written authorization to test.
+- Bypassing activation lock on stolen devices is illegal.
+- No warranty. Use at your own risk.
+- Results are not guaranteed for every device or iOS version.
 
 ---
 
