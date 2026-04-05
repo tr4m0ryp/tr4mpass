@@ -33,7 +33,7 @@ static int ma_client_start(device_info_t *dev, mobileactivation_client_t *ma)
 }
 
 /* Convert a plist node to an XML string. Caller must free *xml. */
-static int plist_to_xml_string(plist_t node, char **xml, uint32_t *xml_len)
+static int plist_node_to_xml(plist_t node, char **xml, uint32_t *xml_len)
 {
     if (!node || !xml || !xml_len) return -1;
 
@@ -123,7 +123,7 @@ int activation_get_session_info(device_info_t *dev,
         return -1;
     }
 
-    if (plist_to_xml_string(blob, blob_xml, blob_len) < 0) {
+    if (plist_node_to_xml(blob, blob_xml, blob_len) < 0) {
         plist_free(blob);
         mobileactivation_client_free(ma);
         return -1;
@@ -162,7 +162,7 @@ int activation_get_info(device_info_t *dev,
         return -1;
     }
 
-    if (plist_to_xml_string(info, info_xml, info_len) < 0) {
+    if (plist_node_to_xml(info, info_xml, info_len) < 0) {
         plist_free(info);
         mobileactivation_client_free(ma);
         return -1;

@@ -6,7 +6,6 @@
  * local drmHandshake construction for offline bypass.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
