@@ -324,8 +324,4 @@ During development, the following proprietary tools were analyzed to understand 
 | Checkm8.info Software | 9.5 | Two-section architecture (A5-A11 vs A12+), DFU exploit flow, FActivation protocol, offline bypass method, bundled go-ios binary, ipwndfu payloads |
 | iRemoveTools | 9.5 | A12+ activation APIs, signal vs no-signal handling, MobileDeviceFramework usage, mobileactivationd interaction |
 
----
 
-## License
-
-MIT
