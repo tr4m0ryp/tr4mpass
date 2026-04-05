@@ -3,6 +3,9 @@
 *.a
 *.so
 *.dylib
+*.obj
+*.exe
+*.lib
 itr4m
 
 # OS files
@@ -21,10 +24,18 @@ Thumbs.db
 # Secrets and credentials
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 *.p12
+*.pfx
+*.jks
 credentials.*
+secrets.*
+
+# Claude Code scaffolding
+notes/
+tasks/
 
 # Python (if any helper scripts)
 __pycache__/
