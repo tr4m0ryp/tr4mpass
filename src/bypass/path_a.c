@@ -83,7 +83,7 @@ path_a_activate(device_info_t *dev)
         log_info("path_a: activation record submitted successfully");
     }
 
-    free(xml);
+    plist_mem_free(xml);
     record_free(record);
     return ret;
 }

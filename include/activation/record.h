@@ -33,7 +33,7 @@ plist_t record_build_a12(const device_info_t *dev);
 /*
  * record_to_xml -- Serialize an activation record to XML string.
  * On success, *len is set to the byte length (excluding NUL).
- * Returns a malloc'd string the caller must free, or NULL on error.
+ * Returns a plist-allocated string; caller must free with plist_mem_free().
  */
 char *record_to_xml(plist_t record, uint32_t *len);
 
