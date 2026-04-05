@@ -274,7 +274,7 @@ int session_activate(device_info_t *dev, plist_t activation_record,
      * In the online flow, stage 4 would first POST to
      * APPLE_DEVICE_ACTIVATION_URL with:
      *   Content-Type: application/x-www-form-urlencoded
-     *   Accept: *\/*
+     *   Accept: all types
      *   Body: "activation-info=" + URL-encoded activation plist
      * The HTTP response body + headers would then be passed here.
      *
