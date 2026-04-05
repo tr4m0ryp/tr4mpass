@@ -4,6 +4,8 @@ Free, open-source tool that removes iCloud activation lock from iPhones and iPad
 
 **Supports iOS 12 through 26.1 | iPhone 5s through iPhone 15 Pro**
 
+***For developers and security researchers: read [`26.3-vulnerability.md`](26.3-vulnerability.md) for potential vulnerabilities that could enable bypass on iOS 26.3 and later.***
+
 ---
 
 ## How to Use
