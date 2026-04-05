@@ -55,3 +55,11 @@ captive_portal/certs/*.srl
 captive_portal/payloads/*.mobileconfig
 captive_portal/server/access.log
 captive_portal/server/requests/
+
+# Large extracted firmware files
+vulnhunt/extracted/ramdisk/*.dmg
+vulnhunt/extracted/binaries/restored_update
+vulnhunt/extracted/binaries/keystorectl
+vulnhunt/extracted/binaries/seputil
+vulnhunt/extracted/binaries/nvram
+vulnhunt/extracted/fdr_keys/
