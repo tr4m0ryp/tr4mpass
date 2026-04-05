@@ -23,7 +23,7 @@ static int ma_client_start(device_info_t *dev, mobileactivation_client_t *ma)
     mobileactivation_error_t err;
 
     err = mobileactivation_client_start_service(dev->handle, ma,
-                                                 "itr4m");
+                                                 "tr4mpass");
     if (err != MOBILEACTIVATION_E_SUCCESS) {
         log_error("%s Could not start mobileactivation service "
                   "(error %d)", LOG_TAG, (int)err);

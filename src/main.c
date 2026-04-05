@@ -1,5 +1,5 @@
 /*
- * main.c -- Itr4m entry point and orchestration.
+ * main.c -- tr4mpass entry point and orchestration.
  *
  * CLI argument parsing, device detection (DFU via libusb first, then
  * libimobiledevice), chip database lookup, module registration, and
@@ -12,7 +12,7 @@
 #include <string.h>
 #include <getopt.h>
 
-#include "itr4m.h"
+#include "tr4mpass.h"
 #include "device/device.h"
 #include "device/usb_dfu.h"
 #include "device/chip_db.h"
@@ -32,7 +32,7 @@ typedef struct {
 static void print_banner(void)
 {
     printf("========================================\n");
-    printf("  Itr4m v%s\n", ITR4M_VERSION);
+    printf("  tr4mpass v%s\n", TR4MPASS_VERSION);
     printf("  Activation lock bypass research tool\n");
     printf("========================================\n\n");
 }

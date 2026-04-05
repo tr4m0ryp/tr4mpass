@@ -1,12 +1,12 @@
 #!/bin/bash
-# Itr4m -- Guided activation lock bypass wrapper
+# tr4mpass -- Guided activation lock bypass wrapper
 # Cross-platform OS detection, dependency installation, device detection,
 # DFU guidance, and bypass execution.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BINARY="$SCRIPT_DIR/itr4m"
+BINARY="$SCRIPT_DIR/tr4mpass"
 
 # ------------------------------------------------------------------ #
 # ANSI colors                                                         #
@@ -39,7 +39,7 @@ msg_warn() { printf "${YELLOW}[!]${RESET} %s\n" "$1"; }
 print_banner() {
     printf "${BOLD}"
     echo "========================================"
-    echo "  Itr4m v0.2.0"
+    echo "  tr4mpass v0.2.0"
     echo "  Activation lock bypass research tool"
     echo "========================================"
     printf "${RESET}\n"
@@ -218,7 +218,7 @@ build_project() {
         return 0
     fi
 
-    msg_info "Building itr4m..."
+    msg_info "Building tr4mpass..."
     (cd "$SCRIPT_DIR" && make clean && make)
 
     if [ ! -x "$BINARY" ]; then
@@ -300,7 +300,7 @@ parse_device_info() {
     local output
     output="$("$BINARY" --detect-only 2>&1)" || true
 
-    # Parse fields from itr4m --detect-only output
+    # Parse fields from tr4mpass --detect-only output
     DEV_MODEL="$(echo "$output" | grep "Product Type:" | sed 's/.*Product Type:[[:space:]]*//')"
     DEV_CHIP_NAME="$(echo "$output" | grep "Chip Name:" | sed 's/.*Chip Name:[[:space:]]*//')"
     DEV_CPID="$(echo "$output" | grep "CPID:" | sed 's/.*CPID:[[:space:]]*//')"
@@ -487,7 +487,7 @@ main() {
     fi
 
     echo ""
-    msg_info "Starting itr4m..."
+    msg_info "Starting tr4mpass..."
     echo ""
 
     exec "$BINARY" "$@"

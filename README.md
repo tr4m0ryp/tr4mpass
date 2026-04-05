@@ -1,6 +1,6 @@
-# Itr4m: Open-Source iOS Activation Lock Bypass Tool
+# tr4mpass: Open-Source iOS Activation Lock Bypass Tool
 
-Itr4m is a terminal-based C tool that removes iCloud activation lock from
+tr4mpass is a terminal-based C tool that removes iCloud activation lock from
 iOS devices locally. No third-party servers, no paid services, no account
 credentials required. Everything runs on your machine over a USB cable.
 
@@ -23,7 +23,7 @@ Apple offers no self-service path for these cases. Their official process
 requires proof of purchase and an appointment at an Apple Store, which may
 not exist in your country, and frequently results in rejection.
 
-Itr4m provides a **local, offline bypass** that works without contacting
+tr4mpass provides a **local, offline bypass** that works without contacting
 Apple or any third party.
 
 ---
@@ -34,7 +34,7 @@ Apple or any third party.
 Connect Device --> Detect Chip --> Enter DFU --> Exploit --> Bypass --> Verify
 ```
 
-Itr4m supports two bypass paths, selected automatically based on the
+tr4mpass supports two bypass paths, selected automatically based on the
 device's SoC:
 
 **Path A -- checkm8 (A5 through A11)**
@@ -111,8 +111,8 @@ dependency installation, building, device detection, DFU guidance, and
 bypass execution:
 
 ```bash
-git clone https://github.com/tr4m0ryp/Itr4m.git
-cd Itr4m
+git clone https://github.com/tr4m0ryp/tr4mpass.git
+cd tr4mpass
 ./start.sh
 ```
 
@@ -125,8 +125,8 @@ Requires Homebrew.
 
 ```bash
 brew install libimobiledevice libirecovery libusb libplist openssl pkg-config
-git clone https://github.com/tr4m0ryp/Itr4m.git
-cd Itr4m
+git clone https://github.com/tr4m0ryp/tr4mpass.git
+cd tr4mpass
 make
 ```
 
@@ -141,8 +141,8 @@ sudo apt-get install -y \
     libimobiledevice-dev libirecovery-dev libusb-1.0-0-dev \
     libplist-dev libssl-dev pkg-config build-essential
 
-git clone https://github.com/tr4m0ryp/Itr4m.git
-cd Itr4m
+git clone https://github.com/tr4m0ryp/tr4mpass.git
+cd tr4mpass
 make
 ```
 
@@ -156,8 +156,8 @@ sudo dnf install -y \
     libimobiledevice-devel libirecovery-devel libusb1-devel \
     libplist-devel openssl-devel pkg-config gcc make
 
-git clone https://github.com/tr4m0ryp/Itr4m.git
-cd Itr4m
+git clone https://github.com/tr4m0ryp/tr4mpass.git
+cd tr4mpass
 make
 ```
 
@@ -194,13 +194,13 @@ correct bypass path, and executes it.
 ### Direct CLI
 
 ```bash
-./itr4m                   # Auto-detect device and bypass path
-./itr4m --detect-only     # Identify the device and exit
-./itr4m --verbose         # Full debug output
-./itr4m --force-path-a    # Force checkm8 path (A5-A11)
-./itr4m --force-path-b    # Force session path (A12+)
-./itr4m --dry-run         # Show what would happen without executing
-./itr4m --help            # Show all options
+./tr4mpass                   # Auto-detect device and bypass path
+./tr4mpass --detect-only     # Identify the device and exit
+./tr4mpass --verbose         # Full debug output
+./tr4mpass --force-path-a    # Force checkm8 path (A5-A11)
+./tr4mpass --force-path-b    # Force session path (A12+)
+./tr4mpass --dry-run         # Show what would happen without executing
+./tr4mpass --help            # Show all options
 ```
 
 ### CLI Options
@@ -241,7 +241,7 @@ correct bypass path, and executes it.
 
 | Module | Header | Source | Purpose |
 |--------|--------|--------|---------|
-| Core | `include/itr4m.h` | `src/main.c` | Version, entry point, orchestration |
+| Core | `include/tr4mpass.h` | `src/main.c` | Version, entry point, orchestration |
 | Bypass Framework | `include/bypass/bypass.h` | `src/bypass/bypass.c` | Plugin registry, module selection |
 | Path A | `include/bypass/path_a.h` | `src/bypass/path_a.c`, `path_a_jailbreak.c` | checkm8 chain (A5-A11) |
 | Path B | `include/bypass/path_b.h` | `src/bypass/path_b.c`, `path_b_identity.c` | Session activation (A12+) |
@@ -264,7 +264,7 @@ correct bypass path, and executes it.
 
 ## Signal vs No-Signal
 
-Itr4m detects whether a device has cellular capability (GSM, CDMA, or
+tr4mpass detects whether a device has cellular capability (GSM, CDMA, or
 dual-mode) based on IMEI and MEID fields.
 
 - **Cellular devices** (iPhone, iPad Cellular): The bypass preserves cell
@@ -295,7 +295,7 @@ Apple's activation endpoint (`humb.apple.com/humbug/baa`), discovered by
 security researcher JGoyd and reported to Apple and US-CERT in May 2025.
 As of April 2026, it remains unpatched.
 
-This would operate as a **Path C** in Itr4m's architecture, using a
+This would operate as a **Path C** in tr4mpass's architecture, using a
 captive portal / rogue access point to inject crafted XML provisioning
 payloads during the Setup Assistant phase. No jailbreak or BootROM exploit
 required.

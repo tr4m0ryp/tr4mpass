@@ -119,7 +119,7 @@ int device_detect(device_info_t *dev)
     /* Start lockdown session with handshake (validates pairing) */
     lerr = lockdownd_client_new_with_handshake(dev->handle,
                                                 &dev->lockdown,
-                                                "itr4m");
+                                                "tr4mpass");
     if (lerr != LOCKDOWN_E_SUCCESS) {
         log_error("lockdownd handshake failed (error %d)", (int)lerr);
         idevice_free(dev->handle);

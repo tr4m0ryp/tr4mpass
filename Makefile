@@ -12,7 +12,7 @@ LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
 # Auto-discover all C sources under src/
 SRCS     = $(shell find src -name '*.c')
 OBJS     = $(SRCS:.c=.o)
-TARGET   = itr4m
+TARGET   = tr4mpass
 
 all: $(TARGET)
 
