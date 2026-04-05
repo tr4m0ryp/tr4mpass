@@ -148,8 +148,8 @@ static int parse_hex_field(const char *serial, const char *key, uint64_t *out)
     if (!p)
         return -1;
     endptr = NULL;
-    *out = strtoull(p, &endptr, 16);
-    if (!endptr || endptr == p) {
+    *out = strtoull(p + strlen(key), &endptr, 16);
+    if (!endptr || endptr == p + strlen(key)) {
         log_warn("parse_hex_field: garbage value for key '%s'", key);
         *out = 0;
     }
