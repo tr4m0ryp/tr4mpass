@@ -7,6 +7,9 @@ PKG_LIBS = libimobiledevice-1.0 libirecovery-1.0 libusb-1.0 \
            libplist-2.0 openssl libcurl libssh2
 
 CFLAGS  += $(shell pkg-config --cflags $(PKG_LIBS) 2>/dev/null)
+# libusb-1.0 pkg-config returns -I.../include/libusb-1.0 (direct path to libusb.h),
+# but code uses #include <libusb-1.0/libusb.h> which needs the parent dir in search path
+CFLAGS  += -I/opt/homebrew/Cellar/libusb/1.0.29/include
 LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
 
 $(foreach lib,$(PKG_LIBS),$(if $(shell pkg-config --exists $(lib) 2>/dev/null && echo ok),,$(warning Library $(lib) not found by pkg-config)))
