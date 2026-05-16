@@ -27,6 +27,8 @@
 #include "util/log.h"
 #include "util/plist_helpers.h"
 
+#include <unistd.h>
+
 #define LOG_TAG "[session]"
 
 /* --- Protocol constants (from go-ios) --- */
@@ -136,6 +138,9 @@ int session_get_info(device_info_t *dev, plist_t *session_info)
     mobileactivation_client_t ma = NULL;
     mobileactivation_error_t err;
 
+    const int attempts = 6;
+    const int sleep_s = 2;
+
     if (!dev || !session_info) {
         log_error("%s Invalid arguments to session_get_info", LOG_TAG);
         return -1;
@@ -143,26 +148,41 @@ int session_get_info(device_info_t *dev, plist_t *session_info)
 
     *session_info = NULL;
 
-    if (ma_session_start(dev, &ma) < 0)
-        return -1;
+    /* Retry the session info creation to tolerate slow device boot or
+     * user Trust prompts. Each attempt starts the mobileactivation
+     * service anew to get fresh state from the device. */
+    for (int i = 0; i < attempts; i++) {
+        if (ma_session_start(dev, &ma) < 0) {
+            log_debug("%s ma_session_start attempt %d failed", LOG_TAG, i+1);
+            sleep(sleep_s);
+            continue;
+        }
 
-    /*
-     * CreateTunnel1SessionInfoRequest: asks the device to produce a
-     * session blob containing the CollectionBlob and
-     * HandshakeRequestMessage needed for drmHandshake.
-     */
-    err = mobileactivation_create_activation_session_info(ma, session_info);
-    mobileactivation_client_free(ma);
+        err = mobileactivation_create_activation_session_info(ma, session_info);
+        mobileactivation_client_free(ma);
+        ma = NULL;
 
-    if (err != MOBILEACTIVATION_E_SUCCESS || !*session_info) {
-        log_error("%s create_activation_session_info failed (error %d)",
-                  LOG_TAG, (int)err);
-        *session_info = NULL;
-        return -1;
+        if (err == MOBILEACTIVATION_E_SUCCESS && *session_info) {
+            log_info("%s Retrieved session info from device", LOG_TAG);
+            return 0;
+        }
+
+        log_debug("%s create_activation_session_info attempt %d failed (err=%d)",
+                  LOG_TAG, i+1, (int)err);
+        if (*session_info) {
+            plist_free(*session_info);
+            *session_info = NULL;
+        }
+        /* Prompt user to accept Trust dialog on first failures */
+        if (i == 0) {
+            log_warn("%s If the device shows a 'Trust This Computer' prompt, accept it now and re-run.", LOG_TAG);
+        }
+        sleep(sleep_s);
     }
 
-    log_info("%s Retrieved session info from device", LOG_TAG);
-    return 0;
+    log_error("%s create_activation_session_info failed after %d attempts", LOG_TAG, attempts);
+    *session_info = NULL;
+    return -1;
 }
 
 int session_drm_handshake(device_info_t *dev, plist_t session_info,
@@ -208,6 +228,9 @@ int session_create_activation_info(device_info_t *dev,
     mobileactivation_client_t ma = NULL;
     mobileactivation_error_t err;
 
+    const int attempts = 6;
+    const int sleep_s = 2;
+
     if (!dev || !handshake_response || !activation_info) {
         log_error("%s Invalid arguments to "
                   "session_create_activation_info", LOG_TAG);
@@ -216,42 +239,49 @@ int session_create_activation_info(device_info_t *dev,
 
     *activation_info = NULL;
 
-    if (ma_session_start(dev, &ma) < 0)
-        return -1;
+    /* Retry the CreateActivationInfo request, similar rationale to
+     * session_get_info: device may be slow to present data or mobileactivation
+     * may temporarily fail. Start the service on each attempt. */
+    for (int i = 0; i < attempts; i++) {
+        if (ma_session_start(dev, &ma) < 0) {
+            log_debug("%s ma_session_start attempt %d failed", LOG_TAG, i+1);
+            sleep(sleep_s);
+            continue;
+        }
 
-    /*
-     * Stage 3: CreateActivationInfoRequest.
-     * Passes the handshake response (FDRBlob, SUInfo,
-     * HandshakeResponseMessage, serverKP) plus options:
-     *   BasebandWaitCount = 90 (retry count for baseband check)
-     * Device returns the activation information plist.
-     *
-     * Copy the handshake_response so we don't mutate the caller's plist.
-     */
-    plist_t hs_copy = plist_copy(handshake_response);
-    if (!hs_copy) {
-        log_error("%s Failed to copy handshake_response", LOG_TAG);
+        plist_t hs_copy = plist_copy(handshake_response);
+        if (!hs_copy) {
+            log_error("%s Failed to copy handshake_response", LOG_TAG);
+            mobileactivation_client_free(ma);
+            return -1;
+        }
+
+        plist_dict_set_item(hs_copy, "BasebandWaitCount",
+                            plist_new_uint(BASEBAND_WAIT_COUNT));
+
+        err = mobileactivation_create_activation_info_with_session(
+                ma, hs_copy, activation_info);
+        plist_free(hs_copy);
         mobileactivation_client_free(ma);
-        return -1;
+        ma = NULL;
+
+        if (err == MOBILEACTIVATION_E_SUCCESS && *activation_info) {
+            log_info("%s Created session activation info", LOG_TAG);
+            return 0;
+        }
+
+        log_debug("%s create_activation_info_with_session attempt %d failed (err=%d)",
+                  LOG_TAG, i+1, (int)err);
+        if (*activation_info) {
+            plist_free(*activation_info);
+            *activation_info = NULL;
+        }
+        sleep(sleep_s);
     }
 
-    plist_dict_set_item(hs_copy, "BasebandWaitCount",
-                        plist_new_uint(BASEBAND_WAIT_COUNT));
-
-    err = mobileactivation_create_activation_info_with_session(
-            ma, hs_copy, activation_info);
-    plist_free(hs_copy);
-    mobileactivation_client_free(ma);
-
-    if (err != MOBILEACTIVATION_E_SUCCESS || !*activation_info) {
-        log_error("%s create_activation_info_with_session failed "
-                  "(error %d)", LOG_TAG, (int)err);
-        *activation_info = NULL;
-        return -1;
-    }
-
-    log_info("%s Created session activation info", LOG_TAG);
-    return 0;
+    log_error("%s create_activation_info_with_session failed after %d attempts", LOG_TAG, attempts);
+    *activation_info = NULL;
+    return -1;
 }
 
 int session_activate(device_info_t *dev, plist_t activation_record,
