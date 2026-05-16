@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <plist/plist.h>
+#include <unistd.h>
 
 #include "device/device.h"
 #include "device/chip_db.h"
@@ -88,13 +89,19 @@ int device_detect(device_info_t *dev)
     int count = 0;
     idevice_error_t ierr;
     lockdownd_error_t lerr;
+    uint64_t candidate_ecid = 0;
+    uint64_t expected_ecid = 0;
+    idevice_t tmp_handle = NULL;
+    lockdownd_client_t tmp_lockdown = NULL;
 
     if (!dev) {
         log_error("NULL device_info_t pointer");
         return -1;
     }
 
+    expected_ecid = dev->ecid;
     memset(dev, 0, sizeof(*dev));
+    dev->ecid = expected_ecid;
 
     /* Enumerate connected USB devices */
     ierr = idevice_get_device_list(&devices, &count);
@@ -105,8 +112,51 @@ int device_detect(device_info_t *dev)
         return -1;
     }
 
-    log_info("Found %d device(s), using first: %s", count, devices[0]);
-    snprintf(dev->udid, sizeof(dev->udid), "%s", devices[0]);
+    log_info("Found %d device(s)", count);
+
+    /* If we have an ECID from DFU phase, try to select the matching
+     * device by opening each candidate and comparing UniqueChipID.
+     */
+    if (dev->ecid != 0) {
+        int i;
+        for (i = 0; i < count; i++) {
+            log_debug("device_detect: probing candidate UDID=%s", devices[i]);
+            if (idevice_new(&tmp_handle, devices[i]) != IDEVICE_E_SUCCESS) {
+                tmp_handle = NULL;
+                continue;
+            }
+            if (lockdownd_client_new_with_handshake(tmp_handle, &tmp_lockdown, "tr4mpass") != LOCKDOWN_E_SUCCESS) {
+                if (tmp_handle) { idevice_free(tmp_handle); tmp_handle = NULL; }
+                tmp_lockdown = NULL;
+                continue;
+            }
+            if (query_uint_value(tmp_lockdown, NULL, "UniqueChipID", &candidate_ecid) == 0) {
+                if (candidate_ecid == dev->ecid) {
+                    log_debug("device_detect: matched ECID 0x%llX to UDID=%s",
+                              (unsigned long long)candidate_ecid, devices[i]);
+                    /* Found matching device */
+                    snprintf(dev->udid, sizeof(dev->udid), "%s", devices[i]);
+                    /* Clean up temporaries; we'll reopen below for the real handle */
+                    lockdownd_client_free(tmp_lockdown);
+                    idevice_free(tmp_handle);
+                    tmp_lockdown = NULL;
+                    tmp_handle = NULL;
+                    break;
+                }
+            }
+            /* Not matching - clean up and continue */
+            if (tmp_lockdown) { lockdownd_client_free(tmp_lockdown); tmp_lockdown = NULL; }
+            if (tmp_handle) { idevice_free(tmp_handle); tmp_handle = NULL; }
+        }
+        if (dev->udid[0] == '\0') {
+            log_warn("device_detect: no matching UDID found for ECID 0x%llX, falling back to first device", (unsigned long long)dev->ecid);
+            snprintf(dev->udid, sizeof(dev->udid), "%s", devices[0]);
+        }
+    } else {
+        /* No ECID to match against: use first device */
+        snprintf(dev->udid, sizeof(dev->udid), "%s", devices[0]);
+    }
+
     idevice_device_list_free(devices);
 
     /* Open device handle */
@@ -116,15 +166,33 @@ int device_detect(device_info_t *dev)
         return -1;
     }
 
-    /* Start lockdown session with handshake (validates pairing) */
-    lerr = lockdownd_client_new_with_handshake(dev->handle,
-                                                &dev->lockdown,
-                                                "tr4mpass");
-    if (lerr != LOCKDOWN_E_SUCCESS) {
-        log_error("lockdownd handshake failed (error %d)", (int)lerr);
-        idevice_free(dev->handle);
-        dev->handle = NULL;
-        return -1;
+    /* Start lockdown session with handshake (validates pairing).
+     * Retry a few times to tolerate transient issues or device latency. */
+    {
+        /* Allow more time for the device to finish booting and present
+         * pairing/trust UI. Increase attempts and add a short initial
+         * pause to reduce race conditions on slow devices. */
+        int attempts = 15;
+        int i;
+
+        /* brief pause before first handshake attempt */
+        sleep(2);
+
+        for (i = 0; i < attempts; i++) {
+            lerr = lockdownd_client_new_with_handshake(dev->handle,
+                                                      &dev->lockdown,
+                                                      "tr4mpass");
+            if (lerr == LOCKDOWN_E_SUCCESS && dev->lockdown != NULL)
+                break;
+            log_debug("lockdownd handshake attempt %d failed: %d", i+1, (int)lerr);
+            sleep(1);
+        }
+        if (lerr != LOCKDOWN_E_SUCCESS) {
+            log_error("lockdownd handshake failed (error %d)", (int)lerr);
+            idevice_free(dev->handle);
+            dev->handle = NULL;
+            return -1;
+        }
     }
 
     log_info("Connected to device %s", dev->udid);
