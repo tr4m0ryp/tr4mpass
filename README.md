@@ -173,6 +173,33 @@ wsl --install
 Then open a WSL terminal and follow the Linux instructions.
 
 </details>
+### PowerShell SessionManagement Module (Developer)
+
+For session lifecycle development and validation, a PowerShell module is available at `powershell/SessionManagement`.
+
+```powershell
+# Import module
+Import-Module .\powershell\SessionManagement\SessionManagement.psd1 -Force
+
+# Run the included example lifecycle
+.\powershell\SessionManagement\examples\Run-Session.ps1
+```
+
+The module exposes `New-SessionManager`, which builds a class-based lifecycle runner with four phases:
+- `SessionHandshake`
+- `ActivationRecord`
+- `Cleanup`
+- `Verify`
+
+Run tests:
+
+```powershell
+# Unit tests
+Invoke-Pester -Script .\powershell\SessionManagement\tests\SessionManager.Tests.ps1
+
+# Integration tests
+Invoke-Pester -Script .\powershell\SessionManagement\tests\SessionManager.Integration.Tests.ps1
+```
 
 ---
 
