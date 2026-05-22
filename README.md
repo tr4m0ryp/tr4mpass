@@ -172,7 +172,59 @@ wsl --install
 
 Then open a WSL terminal and follow the Linux instructions.
 
+To build from PowerShell after WSL is configured, replace `<DISTRO>` with your WSL distribution name and update the project path if needed:
+
+```powershell
+wsl -d <DISTRO> --exec /bin/bash -lc "cd /mnt/c/Users/<USER>/tr4mpass && make"
+```
+
+If the target is already current, `make` reports `Nothing to be done for 'all'`.
+
+The build creates:
+
+- `tr4mpass` at the project root
+- `*.o` object files under `src/`
+
+Verify the executable without starting device operations:
+
+```powershell
+wsl -d <DISTRO> --exec /bin/bash -lc "cd /mnt/c/Users/<USER>/tr4mpass && ./tr4mpass --help"
+```
+
+Run a non-invasive startup/configuration check:
+
+```powershell
+wsl -d <DISTRO> --exec /bin/bash -lc "cd /mnt/c/Users/<USER>/tr4mpass && ./tr4mpass --dry-run --verbose"
+```
+
+For USB device detection from WSL on Windows, install `usbipd-win` on the Windows host and USB tools inside WSL:
+
+```powershell
+winget install --id dorssel.usbipd-win --accept-package-agreements --accept-source-agreements
+wsl -d <DISTRO> --exec /bin/bash -lc "sudo apt-get update && sudo apt-get install -y usbutils usbip"
+```
+
+List Windows USB devices:
+
+```powershell
+& 'C:\Program Files\usbipd-win\usbipd.exe' list
+```
+
+Bind and attach the target USB device from an Administrator PowerShell, replacing `<BUSID>` with the bus ID shown by `usbipd list`:
+
+```powershell
+& 'C:\Program Files\usbipd-win\usbipd.exe' bind --busid <BUSID> --force
+& 'C:\Program Files\usbipd-win\usbipd.exe' attach --wsl --busid <BUSID>
+```
+
+Confirm WSL can see the USB device:
+
+```powershell
+wsl -d <DISTRO> --exec /bin/bash -lc "lsusb"
+```
+
 </details>
+
 ### PowerShell SessionManagement Module (Developer)
 
 For session lifecycle development and validation, a PowerShell module is available at `powershell/SessionManagement`.
