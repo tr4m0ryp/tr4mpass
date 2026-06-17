@@ -5,6 +5,7 @@ LDFLAGS  =
 # Library discovery via pkg-config (warn but do not fail if missing)
 PKG_LIBS = libimobiledevice-1.0 libirecovery-1.0 libusb-1.0 \
            libplist-2.0 openssl libcurl libssh2
+pkg-config --cflags libusb-1.0
 
 CFLAGS  += $(shell pkg-config --cflags $(PKG_LIBS) 2>/dev/null)
 LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
