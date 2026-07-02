@@ -11,6 +11,35 @@ LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
 
 $(foreach lib,$(PKG_LIBS),$(if $(shell pkg-config --exists $(lib) 2>/dev/null && echo ok),,$(warning Library $(lib) not found by pkg-config)))
 
+# ================================================================
+# Libirecovery API Compatibility Detection
+# ================================================================
+# Modern libirecovery (2024+) uses 'cpid' instead of 'pid'
+# and removed IRECV_SEND_OPT_DFU_NOTIFY_FINISH constant.
+# Detect what's available and set appropriate compile flags.
+
+IRECV_HEADERS := $(shell pkg-config --cflags-only-I libirecovery-1.0 2>/dev/null)
+
+# Check if cpid field is available (modern API)
+ifeq ($(shell grep -q "cpid" $(IRECV_HEADERS)/libirecovery.h 2>/dev/null && echo found),found)
+    CFLAGS += -DHAVE_IRECV_DEVICE_INFO_CPID
+    IRECV_API = modern (cpid)
+else
+    CFLAGS += -DHAVE_IRECV_DEVICE_INFO_PID
+    IRECV_API = legacy (pid)
+endif
+
+# Check if DFU notify flag is available
+ifeq ($(shell grep -q "IRECV_SEND_OPT_DFU_NOTIFY_FINISH" $(IRECV_HEADERS)/libirecovery.h 2>/dev/null && echo found),found)
+    CFLAGS += -DHAVE_IRECV_SEND_OPT_DFU_NOTIFY_FINISH
+    IRECV_FLAG = available
+else
+    IRECV_FLAG = missing (fallback: 0)
+endif
+
+# Print detected configuration at build time
+$(info libirecovery API: $(IRECV_API), DFU notify flag: $(IRECV_FLAG))
+
 # Auto-discover all C sources under src/
 SRCS     = $(shell find src -name '*.c')
 OBJS     = $(SRCS:.c=.o)
@@ -80,9 +109,9 @@ INT_SRCS      = $(shell find tests/integration -name '*.c' 2>/dev/null)
 #   - src/main.c (has its own main())
 #   - src/exploit/* and src/device/usb_dfu.c (direct DFU/checkm8 h/w code)
 MOCK_SUT_SRCS = $(shell find src -name '*.c' \
-                  -not -path 'src/main.c' \
-                  -not -path 'src/exploit/*' \
-                  -not -path 'src/device/usb_dfu.c')
+                   -not -path 'src/main.c' \
+                   -not -path 'src/exploit/*' \
+                   -not -path 'src/device/usb_dfu.c')
 MOCK_ALL_SRCS = $(TEST_SECT) $(MOCK_SRCS) $(INT_SRCS) $(MOCK_SUT_SRCS)
 MOCK_TARGET   = tests/run_mock_tests
 

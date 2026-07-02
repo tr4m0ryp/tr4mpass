@@ -39,6 +39,7 @@
 #include "bypass/path_a_ramdisk_internal.h"
 #include "device/device.h"
 #include "util/log.h"
+#include "compat/libirecovery_compat.h"
 
 #define DEFAULT_SSH_PORT        2222
 #define DEFAULT_TIMEOUT_SEC     120
@@ -140,6 +141,9 @@ send_staged_image(irecv_client_t client, const char *path,
     }
 
     log_info("path_a_ramdisk: sending %s (%s)", label, path);
+    /* Use compatibility layer for the DFU notify flag.
+     * Modern libirecovery (2024+) doesn't have the named constant,
+     * so the compatibility header defines it as 0 if missing. */
     err = irecv_send_file(client, path, IRECV_SEND_OPT_DFU_NOTIFY_FINISH);
     if (err != IRECV_E_SUCCESS) {
         log_error("path_a_ramdisk: failed to send %s: %s",

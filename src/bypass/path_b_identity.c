@@ -16,6 +16,7 @@
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
 #include "util/log.h"
+#include "compat/libirecovery_compat.h"
 
 /* USB standard request codes (USB 2.0 spec table 9-4) */
 #define USB_REQ_GET_DESCRIPTOR  0x06
@@ -188,6 +189,7 @@ int path_b_write_serial_irecovery(device_info_t *dev, const char *new_serial)
     const struct irecv_device_info *info;
     char           cmd[DFU_SERIAL_MAX + 32];
     int            rc = -1;
+    uint32_t       device_id;
 
     if (!dev || !new_serial) {
         log_error("[path_b_id] Invalid arguments to write_serial_irecovery");
@@ -207,11 +209,14 @@ int path_b_write_serial_irecovery(device_info_t *dev, const char *new_serial)
         return -1;
     }
 
-    /* Verify the device is actually in recovery (not DFU or normal) */
+    /* Verify the device is actually in recovery (not DFU or normal)
+     * Uses compatibility layer to handle both old (pid) and new (cpid) APIs */
     info = irecv_get_device_info(client);
-    if (!info || info->pid != APPLE_RECOVERY_PID) {
-        log_error("[path_b_id] Device is not in recovery mode (pid=0x%04X)",
-                  info ? (unsigned)info->pid : 0);
+    device_id = irecv_get_device_id(info);
+
+    if (!info || device_id != APPLE_RECOVERY_PID) {
+        log_error("[path_b_id] Device is not in recovery mode (%s=0x%04X)",
+                  IRECV_DEVICE_ID_FIELD_NAME, device_id);
         irecv_close(client);
         return -1;
     }
