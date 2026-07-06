@@ -6,6 +6,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#include <libirecovery.h>
+
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
 #include "util/log.h"
@@ -205,19 +207,63 @@ int usb_dfu_read_info(libusb_device_handle *handle, uint32_t *cpid,
         }
     }
 
-    /* When CPID is still zero after parsing, the serial is likely the
-     * uninitialised iBoot string -- device is not in true SecureROM DFU mode. */
+    /* Placeholder USB string -- caller may retry via usb_dfu_enrich_via_irecv(). */
     if (cpid && *cpid == 0 &&
         strncmp((char *)buf, "Apple Mobile Device", 19) == 0) {
-        log_error("DFU serial indicates device is NOT in SecureROM DFU mode.");
-        log_info("Expected format: 'CPID:XXXX CPRV:XX BDID:XX ECID:XXXX ...'");
-        log_info("Re-enter DFU using the correct button sequence:");
-        log_info("  Home button:  Power+Home 10s, release Power, hold Home 5s");
-        log_info("  Face ID:      Vol-Up, Vol-Down, hold Side to black screen,");
-        log_info("                Side+Vol-Down 5s, release Side, hold Vol-Down 10s");
-        log_info("Screen must stay completely BLACK (no Apple logo).");
+        log_debug("DFU USB string is generic placeholder; irecv fallback may apply");
     }
 
+    return 0;
+}
+
+int usb_dfu_enrich_via_irecv(libusb_device_handle *handle,
+                             uint32_t *cpid, uint64_t *ecid,
+                             char *serial, size_t serial_len)
+{
+    irecv_client_t                  client = NULL;
+    irecv_error_t                   err;
+    const struct irecv_device_info *info;
+
+    /*
+     * libirecovery cannot open the device while libusb holds the DFU
+     * interface. Close the handle entirely; caller re-opens via usb_dfu_find().
+     */
+    if (handle)
+        usb_dfu_close(handle);
+
+    err = irecv_open_with_ecid_and_attempts(&client, 0, 5);
+    if (err != IRECV_E_SUCCESS || !client) {
+        log_warn("irecv DFU enrich failed: %s", irecv_strerror(err));
+        return -1;
+    }
+
+    info = irecv_get_device_info(client);
+    if (!info || info->cpid == 0) {
+        log_warn("irecv DFU enrich: no CPID in device info");
+        irecv_close(client);
+        return -1;
+    }
+
+    if (cpid)
+        *cpid = info->cpid;
+    if (ecid && info->ecid != 0)
+        *ecid = info->ecid;
+    if (serial && serial_len > 0) {
+        if (info->serial_string && info->serial_string[0] != '\0') {
+            strncpy(serial, info->serial_string, serial_len - 1);
+            serial[serial_len - 1] = '\0';
+        } else {
+            serial[0] = '\0';
+        }
+    }
+
+    log_info("CPID (irecv): 0x%04X", info->cpid);
+    if (info->ecid != 0)
+        log_info("ECID (irecv): 0x%016" PRIX64, (uint64_t)info->ecid);
+    if (info->serial_string)
+        log_debug("DFU serial (irecv): %s", info->serial_string);
+
+    irecv_close(client);
     return 0;
 }
 

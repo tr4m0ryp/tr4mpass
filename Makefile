@@ -46,7 +46,8 @@ TEST_SECT_CORE = tests/test_main.c tests/test_parsing.c tests/test_chip_db.c \
 # Sections that require the mocked hardware libraries -- only used by
 # `make test-mocks`.  Include stub definitions of their entry points in
 # TEST_SECT_STUBS so the hw-independent target still links.
-TEST_SECT_MOCK = tests/test_ramdisk.c tests/test_ssh_jailbreak.c
+TEST_SECT_MOCK = tests/test_ramdisk.c tests/test_ssh_jailbreak.c \
+                 tests/test_path_b_bootimg.c
 
 # Aggregate for the mock build: real section bodies.
 TEST_SECT     = $(TEST_SECT_CORE) $(TEST_SECT_MOCK)

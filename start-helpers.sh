@@ -182,10 +182,20 @@ install_deps() {
 # ------------------------------------------------------------------ #
 
 build_project() {
-    if [ -f "$BINARY" ] && [ -x "$BINARY" ]; then
-        msg_ok "Binary already built: $BINARY"
-        return 0
+    local resolved_dir resolved_bin
+    local binary_mtime=-1
+    local rebuilt=0
+
+    resolved_dir="$(cd "$SCRIPT_DIR" && pwd -P)"
+    resolved_bin="$resolved_dir/$(basename "$BINARY")"
+
+    if echo "$resolved_dir" | grep -qiE '/[Tt]rash/'; then
+        msg_warn "Project path is inside Trash ($resolved_dir)."
+        msg_info "Copy the repo to a permanent location, then: make clean && make"
     fi
+
+    msg_info "Project: $resolved_dir"
+    msg_info "Binary:  $resolved_bin"
 
     if [ -d "$BINARY" ]; then
         msg_err "Expected binary at $BINARY but found a directory."
@@ -193,8 +203,14 @@ build_project() {
         exit 1
     fi
 
-    msg_info "Building tr4mpass..."
-    if ! (cd "$SCRIPT_DIR" && make clean && make); then
+    if [ -f "$resolved_bin" ]; then
+        binary_mtime=$(stat -c %Y "$resolved_bin" 2>/dev/null \
+            || stat -f %m "$resolved_bin" 2>/dev/null \
+            || echo -1)
+    fi
+
+    msg_info "Building tr4mpass (make)..."
+    if ! (cd "$resolved_dir" && make); then
         msg_err "Build failed. Check compiler output above."
         msg_info "If the linker reports 'library not found for -lssh2', install libssh2"
         msg_info "  macOS:  brew install libssh2"
@@ -204,17 +220,26 @@ build_project() {
         exit 1
     fi
 
-    if [ ! -f "$BINARY" ]; then
-        msg_err "Build completed but binary not found at $BINARY."
+    if [ ! -f "$resolved_bin" ]; then
+        msg_err "Build completed but binary not found at $resolved_bin."
         exit 1
     fi
 
-    if [ ! -x "$BINARY" ]; then
-        msg_err "Binary exists but is not executable. Run: chmod +x $BINARY"
+    if [ ! -x "$resolved_bin" ]; then
+        msg_err "Binary exists but is not executable. Run: chmod +x $resolved_bin"
         exit 1
     fi
 
-    msg_ok "Build successful."
+    if [ "$binary_mtime" -eq -1 ] || [ "$(stat -c %Y "$resolved_bin" 2>/dev/null \
+        || stat -f %m "$resolved_bin" 2>/dev/null)" -gt "$binary_mtime" ]; then
+        rebuilt=1
+    fi
+
+    if [ "$rebuilt" -eq 1 ]; then
+        msg_ok "Build successful: $resolved_bin"
+    else
+        msg_ok "Binary up to date: $resolved_bin"
+    fi
 }
 
 # ------------------------------------------------------------------ #
@@ -323,14 +348,18 @@ parse_device_info() {
         return 0
     fi
 
-    DEV_MODEL="$(echo "$output" | grep "Product Type:" | sed 's/.*Product Type:[[:space:]]*//')"
-    DEV_CHIP_NAME="$(echo "$output" | grep "Chip Name:" | sed 's/.*Chip Name:[[:space:]]*//')"
-    DEV_CPID="$(echo "$output" | grep "CPID:" | sed 's/.*CPID:[[:space:]]*//')"
-    DEV_IOS="$(echo "$output" | grep "iOS Version:" | sed 's/.*iOS Version:[[:space:]]*//')"
-    DEV_SERIAL="$(echo "$output" | grep "Serial:" | sed 's/.*Serial:[[:space:]]*//')"
-    DEV_IMEI="$(echo "$output" | grep "IMEI:" | sed 's/.*IMEI:[[:space:]]*//')"
-    DEV_CHECKM8="$(echo "$output" | grep "checkm8 vuln:" | sed 's/.*checkm8 vuln:[[:space:]]*//')"
-    DEV_DFU="$(echo "$output" | grep "DFU Mode:" | sed 's/.*DFU Mode:[[:space:]]*//')"
+    DEV_MODEL="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  Product Type:/{sub(/^  Product Type:[[:space:]]*/,""); print; exit}')"
+    DEV_CHIP_NAME="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  Chip Name:/{sub(/^  Chip Name:[[:space:]]*/,""); print; exit}')"
+    DEV_CPID="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  CPID:/{print $2; exit}')"
+    DEV_IOS="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  iOS Version:/{sub(/^  iOS Version:[[:space:]]*/,""); print; exit}')"
+    DEV_SERIAL="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  Serial:/{sub(/^  Serial:[[:space:]]*/,""); print; exit}')"
+    DEV_IMEI="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  IMEI:/{sub(/^  IMEI:[[:space:]]*/,""); print; exit}')"
+    DEV_CHECKM8="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  checkm8 vuln:/{sub(/^  checkm8 vuln:[[:space:]]*/,""); print; exit}')"
+    DEV_DFU="$(echo "$output" | awk '/^--- Device Information ---/{f=1;next} f&&/^  DFU Mode:/{sub(/^  DFU Mode:[[:space:]]*/,""); print; exit}')"
+
+    if [ -n "$DEV_CPID" ] && ! echo "$DEV_CPID" | grep -qE '^0x[0-9A-Fa-f]+$'; then
+        DEV_CPID=""
+    fi
 
     if [ "$DEV_CHECKM8" = "YES" ]; then
         DEV_BYPASS="Path A (checkm8, A5-A11)"
@@ -468,4 +497,31 @@ gate_support() {
     echo ""
     printf "${BOLD}Press Enter to start bypass...${RESET}"
     read -r
+}
+
+# ------------------------------------------------------------------ #
+# Path B boot image (IPSW/iBSS) auto-detection                        #
+# ------------------------------------------------------------------ #
+
+prepare_path_b_bootimg() {
+    local candidate=""
+
+    if [ -n "${TR4MPASS_IBSS_PATH:-}" ] || [ -n "${TR4MPASS_IPSW_PATH:-}" ]; then
+        return 0
+    fi
+
+    candidate=$(ls -t /mnt/c/3uTools*/Firmware/*Restore.ipsw 2>/dev/null | head -1 || true)
+    if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+        export TR4MPASS_IPSW_PATH="$candidate"
+        msg_info "Auto-selected firmware: $(basename "$candidate")"
+        return 0
+    fi
+
+    if [ -d "${HOME}/Firmware" ]; then
+        candidate=$(ls -t "${HOME}/Firmware"/*Restore.ipsw 2>/dev/null | head -1 || true)
+        if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+            export TR4MPASS_IPSW_PATH="$candidate"
+            msg_info "Auto-selected firmware: $(basename "$candidate")"
+        fi
+    fi
 }

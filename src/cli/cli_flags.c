@@ -33,6 +33,8 @@ static const flag_map_t g_flag_map[] = {
       "<path>", "Staged ramdisk .dmg"                },
     { "ibss",         TR4MPASS_ENV_IBSS_PATH,
       "<path>", "Signed iBSS image"                  },
+    { "ipsw",         TR4MPASS_ENV_IPSW_PATH,
+      "<path>", "Signed IPSW firmware archive"       },
     { "ibec",         TR4MPASS_ENV_IBEC_PATH,
       "<path>", "Signed iBEC image"                  },
     { "devicetree",   TR4MPASS_ENV_DEVICETREE_PATH,

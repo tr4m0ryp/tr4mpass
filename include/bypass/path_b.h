@@ -47,4 +47,11 @@ int path_b_write_serial(device_info_t *dev, const char *new_serial);
  */
 int path_b_write_serial_irecovery(device_info_t *dev, const char *new_serial);
 
+/*
+ * path_b_backfill_ids_via_irecv -- Populate dev->cpid/dev->ecid from libirecovery
+ * when libusb DFU detection left them at zero. No-op when both are set.
+ * Returns 0 on success (including already populated), -1 on failure.
+ */
+int path_b_backfill_ids_via_irecv(device_info_t *dev);
+
 #endif /* PATH_B_H */

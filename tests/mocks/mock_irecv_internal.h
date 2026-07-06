@@ -62,5 +62,6 @@ extern irecv_send_file_stage_t g_irecv_send_file_stages[IRECV_SEND_FILE_STAGES];
 extern uint32_t  g_irecv_info_pid;
 extern uint64_t  g_irecv_info_ecid;
 extern char      g_irecv_info_serial[128];
+extern char      g_irecv_env_serial_number[256];
 
 #endif /* TR4MPASS_MOCK_IRECV_INTERNAL_H */

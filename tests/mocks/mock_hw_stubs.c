@@ -103,6 +103,14 @@ int usb_dfu_read_info(libusb_device_handle *handle, uint32_t *cpid,
     return 0;
 }
 
+int usb_dfu_enrich_via_irecv(libusb_device_handle *handle,
+                             uint32_t *cpid, uint64_t *ecid,
+                             char *serial, size_t serial_len)
+{
+    (void)handle;
+    return usb_dfu_read_info(NULL, cpid, ecid, serial, serial_len);
+}
+
 int usb_dfu_send(libusb_device_handle *handle, const void *data, size_t len)
 {
     (void)handle; (void)data; (void)len;

@@ -16,9 +16,9 @@
  *     surfaces -1 cleanly and get_activation_state still says Unactivated,
  *   - signal_detect_type correctly distinguishes cellular from WiFi-only.
  *
- * We do NOT drive path_b_module.execute() end-to-end: step_reboot_to_recovery
- * uses 2-second libusb polls and a 60s timeout that make synchronous
- * tests impractical.  The per-step helpers are exercised directly.
+ * We do NOT drive path_b_module.execute() end-to-end: recovery polling
+ * and iBSS upload require mocked libusb/libirecovery timing.  The
+ * bootimg resolver and per-step helpers are exercised directly.
  */
 
 #include "test_framework.h"
@@ -91,7 +91,8 @@ fake_usb_handle(void)
  * Identity manipulation happy path.  Asserts:
  *   - path_b_manipulate_identity returns 0,
  *   - irecv_setenv("serial-number", ...) contained "PWND:[checkm8]",
- *   - irecv_saveenv persisted the change.
+ *   - irecv_saveenv persisted the change,
+ *   - irecv_getenv("serial-number") read back the PWND marker.
  */
 static void
 test_path_b_e2e_identity_manipulation_succeeds(void)
@@ -103,6 +104,7 @@ test_path_b_e2e_identity_manipulation_succeeds(void)
     size_t i;
     int found_pwnd = 0;
     int found_saveenv = 0;
+    int found_getenv = 0;
 
     printf("  [e2e] path_b identity manipulation (happy)\n");
 
@@ -123,9 +125,12 @@ test_path_b_e2e_identity_manipulation_succeeds(void)
             found_pwnd = 1;
         if (strstr(line, "irecv_saveenv"))
             found_saveenv = 1;
+        if (strstr(line, "irecv_getenv(serial-number"))
+            found_getenv = 1;
     }
     ASSERT_EQ(found_pwnd,    1);
     ASSERT_EQ(found_saveenv, 1);
+    ASSERT_EQ(found_getenv,  1);
 }
 
 /*

@@ -101,6 +101,7 @@ typedef struct {
 static const env_entry_t g_tr4mpass_vars[] = {
     { TR4MPASS_ENV_RAMDISK_PATH,    ENV_KIND_PATH   },
     { TR4MPASS_ENV_IBSS_PATH,       ENV_KIND_PATH   },
+    { TR4MPASS_ENV_IPSW_PATH,       ENV_KIND_PATH   },
     { TR4MPASS_ENV_IBEC_PATH,       ENV_KIND_PATH   },
     { TR4MPASS_ENV_DEVICETREE_PATH, ENV_KIND_PATH   },
     { TR4MPASS_ENV_TRUSTCACHE_PATH, ENV_KIND_PATH   },

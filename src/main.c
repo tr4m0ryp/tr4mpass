@@ -140,6 +140,24 @@ static int detect_device(device_info_t *dev)
         if (usb_dfu_read_info(usb_handle, &cpid, &ecid,
                               serial, sizeof(serial)) < 0)
             log_warn("Failed to read DFU serial info");
+
+        if (cpid == 0) {
+            usb_dfu_enrich_via_irecv(usb_handle, &cpid, &ecid,
+                                     serial, sizeof(serial));
+            usb_handle = NULL;
+            if (cpid == 0) {
+                log_error("DFU serial indicates device is NOT in SecureROM DFU mode.");
+                log_info("Expected format: 'CPID:XXXX CPRV:XX BDID:XX ECID:XXXX ...'");
+                log_info("Re-enter DFU using the correct button sequence:");
+                log_info("  Home button:  Power+Home 10s, release Power, hold Home 5s");
+                log_info("  Face ID:      Vol-Up, Vol-Down, hold Side to black screen,");
+                log_info("                Side+Vol-Down 5s, release Side, hold Vol-Down 10s");
+                log_info("Screen must stay completely BLACK (no Apple logo).");
+            }
+            if (usb_dfu_find(&usb_handle) != 0)
+                log_warn("Failed to re-open DFU handle after irecv enrich");
+        }
+
         dev->cpid        = cpid;
         dev->ecid        = ecid;
         dev->is_dfu_mode = 1;

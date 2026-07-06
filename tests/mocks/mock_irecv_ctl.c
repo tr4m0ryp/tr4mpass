@@ -21,6 +21,7 @@ uint32_t  g_irecv_info_pid  = 0x1281;
 uint64_t  g_irecv_info_ecid;
 char      g_irecv_info_serial[128] =
     "CPID:8020 CPRV:11 ECID:0012345678ABCDEF";
+char      g_irecv_env_serial_number[256];
 
 void mock_irecv_reset(void)
 {
@@ -44,6 +45,7 @@ void mock_irecv_reset(void)
     g_irecv_info_ecid            = 0;
     snprintf(g_irecv_info_serial, sizeof(g_irecv_info_serial), "%s",
              "CPID:8020 CPRV:11 ECID:0012345678ABCDEF");
+    g_irecv_env_serial_number[0] = '\0';
 }
 
 void mock_irecv_expect_command(const char *cmd_substring)

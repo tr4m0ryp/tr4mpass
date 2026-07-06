@@ -52,6 +52,17 @@ int usb_dfu_read_info(libusb_device_handle *handle, uint32_t *cpid,
                       uint64_t *ecid, char *serial, size_t serial_len);
 
 /*
+ * Fill CPID/ECID/serial via libirecovery when the USB string descriptor
+ * returns a placeholder (e.g. "Apple Mobile Device (DFU Mode)").
+ * If handle is non-NULL, closes it via usb_dfu_close() before opening
+ * irecv; caller must re-open with usb_dfu_find() when a handle is needed.
+ * Returns 0 when CPID was obtained, -1 on failure.
+ */
+int usb_dfu_enrich_via_irecv(libusb_device_handle *handle,
+                             uint32_t *cpid, uint64_t *ecid,
+                             char *serial, size_t serial_len);
+
+/*
  * Send data to the DFU device via control transfer (DFU_DNLOAD).
  * Returns 0 on success, -1 on failure.
  */

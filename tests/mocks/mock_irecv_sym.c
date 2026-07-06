@@ -192,6 +192,10 @@ irecv_error_t irecv_setenv(irecv_client_t client, const char *variable,
                 return (irecv_error_t)g_irecv_setenv_results[i].error;
             }
         }
+        if (strcmp(variable, "serial-number") == 0 && value) {
+            snprintf(g_irecv_env_serial_number,
+                     sizeof(g_irecv_env_serial_number), "%s", value);
+        }
     }
     return (irecv_error_t)g_irecv_setenv_default_error;
 }
@@ -207,8 +211,16 @@ irecv_error_t irecv_getenv(irecv_client_t client, const char *variable,
 {
     (void)client;
     mock_log_append("irecv_getenv(%s)", variable ? variable : "(null)");
-    if (value)
-        *value = strdup("mockvalue");
+    if (!value)
+        return (irecv_error_t)0;
+
+    if (variable && strcmp(variable, "serial-number") == 0
+        && g_irecv_env_serial_number[0] != '\0') {
+        *value = strdup(g_irecv_env_serial_number);
+        return (irecv_error_t)0;
+    }
+
+    *value = strdup("mockvalue");
     return (irecv_error_t)0;
 }
 

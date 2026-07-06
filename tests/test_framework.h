@@ -55,4 +55,7 @@ void run_ssh_jailbreak_tests(void);
 void run_path_a_integration_tests(void);
 void run_path_b_integration_tests(void);
 
+/* Path B boot image resolver (mock-only; needs libirecovery + unzip) */
+void run_path_b_bootimg_tests(void);
+
 #endif /* TR4MPASS_TEST_FRAMEWORK_H */

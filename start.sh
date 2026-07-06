@@ -138,6 +138,8 @@ main() {
         exit 1
     fi
 
+    prepare_path_b_bootimg
+
     exec "$BINARY" "$@"
 }
 

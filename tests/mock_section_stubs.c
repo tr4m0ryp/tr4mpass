@@ -33,3 +33,8 @@ void run_path_b_integration_tests(void)
 {
     printf("--- Section 11: Path B E2E (skipped, run via test-mocks) ---\n");
 }
+
+void run_path_b_bootimg_tests(void)
+{
+    printf("--- Section 12: Path B bootimg (skipped, run via test-mocks) ---\n");
+}
