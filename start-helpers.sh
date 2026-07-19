@@ -1,5 +1,4 @@
-#!/bin/bash
-# start-helpers.sh -- Helper functions sourced by start.sh.
+start.sh# start-helpers.sh -- Helper functions sourced by start.sh.
 #
 # This file is not meant to be executed directly.  It houses every
 # helper routine (OS detection, dependency install, device detection,
@@ -10,8 +9,7 @@
 # BINARY path, and the PKGCONFIG_DEPS array declared by start.sh
 # before this file is sourced.
 
-# ------------------------------------------------------------------ #
-# Logging helpers                                                     #
+# -----------------------------------------------------------------                                       #
 # ------------------------------------------------------------------ #
 
 msg_ok()   { printf "${GREEN}[+]${RESET} %s\n" "$1"; }
