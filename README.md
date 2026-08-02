@@ -32,6 +32,8 @@ That's it. The script will:
 - Run the bypass
 - Tell you when it's done
 
+> **Best results for A5-A11/checkm8:** use native Linux (including Kali) or macOS with direct USB access. WSL + usbipd can miss checkm8 timing windows.
+
 ### 3. Put Your Device in DFU Mode
 
 The script will walk you through this, but here's the short version:
@@ -145,8 +147,12 @@ brew install libimobiledevice libirecovery libusb libplist openssl pkg-config
 
 ```bash
 sudo apt-get install -y \
-    libimobiledevice-dev libirecovery-1.0-dev libusb-1.0-0-dev \
-    libplist-dev libssl-dev pkg-config build-essential
+    libimobiledevice-dev libusb-1.0-0-dev libplist-dev \
+    libssl-dev libssh2-1-dev pkg-config build-essential usbutils usbmuxd
+
+# Debian/Kali package names vary by release for libirecovery and libcurl dev:
+sudo apt-get install -y libirecovery-1.0-dev || sudo apt-get install -y libirecovery-dev
+sudo apt-get install -y libcurl4-openssl-dev || sudo apt-get install -y libcurl4-gnutls-dev
 ```
 
 </details>
@@ -324,5 +330,4 @@ During development, the following proprietary tools were analyzed to understand 
 |------|---------|------------------|
 | Checkm8.info Software | 9.5 | Two-section architecture (A5-A11 vs A12+), DFU exploit flow, FActivation protocol, offline bypass method, bundled go-ios binary, ipwndfu payloads |
 | iRemoveTools | 9.5 | A12+ activation APIs, signal vs no-signal handling, MobileDeviceFramework usage, mobileactivationd interaction |
-
 

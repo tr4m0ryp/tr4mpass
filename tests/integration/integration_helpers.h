@@ -20,16 +20,17 @@
 
 #include "device/device.h"
 
-#define E2E_PATH_MAX 160
+#define E2E_PATH_MAX      160  /* base_dir: /tmp/tr4mpass_e2e_<pid>        */
+#define E2E_PATH_FULL_MAX 200  /* base_dir + longest suffix (/mobileactivationd) */
 
 typedef struct {
     char base_dir[E2E_PATH_MAX];
-    char ibss[E2E_PATH_MAX];
-    char ibec[E2E_PATH_MAX];
-    char devtree[E2E_PATH_MAX];
-    char trustcache[E2E_PATH_MAX];
-    char ramdisk[E2E_PATH_MAX];
-    char patched_mad[E2E_PATH_MAX];
+    char ibss[E2E_PATH_FULL_MAX];
+    char ibec[E2E_PATH_FULL_MAX];
+    char devtree[E2E_PATH_FULL_MAX];
+    char trustcache[E2E_PATH_FULL_MAX];
+    char ramdisk[E2E_PATH_FULL_MAX];
+    char patched_mad[E2E_PATH_FULL_MAX];
 } e2e_fixture_t;
 
 /*

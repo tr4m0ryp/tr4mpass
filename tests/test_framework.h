@@ -29,9 +29,13 @@ extern int g_failures;
 #define ASSERT_NEQ(a, b)    ASSERT((a) != (b))
 #define ASSERT_NULL(p)      ASSERT((p) == NULL)
 #define ASSERT_NOTNULL(p)   ASSERT((p) != NULL)
-#define ASSERT_STREQ(a, b)  ASSERT((a) && (b) && strcmp((a), (b)) == 0)
-#define ASSERT_STRSTR(h, n) ASSERT((h) && (n) && strstr((h), (n)) != NULL)
-#define ASSERT_MEM_EQ(a, b, n) ASSERT((a) && (b) && memcmp((a), (b), (n)) == 0)
+/* ASSERT_STREQ / ASSERT_STRSTR: do not null-guard the second argument —
+ * it is always a string literal or stack array (always non-null), and
+ * the check triggers -Waddress on GCC.  Keep the first-arg guard for
+ * ASSERT_MEM_EQ since the first argument (heap pointer) may be NULL. */
+#define ASSERT_STREQ(a, b)  ASSERT(strcmp((a), (b)) == 0)
+#define ASSERT_STRSTR(h, n) ASSERT(strstr((h), (n)) != NULL)
+#define ASSERT_MEM_EQ(a, b, n) ASSERT((a) && memcmp((a), (b), (n)) == 0)
 #define ASSERT_LT(a, b)     ASSERT((a) < (b))
 #define ASSERT_GT(a, b)     ASSERT((a) > (b))
 

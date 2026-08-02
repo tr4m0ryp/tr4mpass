@@ -1,0 +1,8 @@
+# Force LF line endings for all text content so that core.autocrlf=true
+# on Windows does not inject \r into shell scripts and C sources.
+* text=auto
+*.sh  text eol=lf
+*.c   text eol=lf
+*.h   text eol=lf
+Makefile text eol=lf
+*.md  text eol=lf

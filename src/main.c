@@ -127,7 +127,7 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
     return 0;
 }
 
-static int detect_device(device_info_t *dev)
+static int detect_device(device_info_t *dev, const cli_opts_t *opts)
 {
     libusb_device_handle *usb_handle = NULL;
     uint8_t iserial = 0;
@@ -139,9 +139,15 @@ static int detect_device(device_info_t *dev)
         uint32_t cpid = 0;
         uint64_t ecid = 0;
         char serial[DFU_SERIAL_MAX] = {0};
-        if (usb_dfu_read_info(usb_handle, iserial, &cpid, &ecid,
-                              serial, sizeof(serial)) < 0)
-            log_warn("Failed to read DFU serial info");
+        int have_manual_ids = opts &&
+                              (opts->has_cpid_override || opts->has_ecid_override);
+        if (!have_manual_ids) {
+            if (usb_dfu_read_info(usb_handle, iserial, &cpid, &ecid,
+                                  serial, sizeof(serial)) < 0)
+                log_warn("Failed to read DFU serial info");
+        } else {
+            log_info("Skipping DFU serial probe because manual IDs were supplied");
+        }
         dev->cpid          = cpid;
         dev->ecid          = ecid;
         dev->is_dfu_mode   = 1;
@@ -257,7 +263,7 @@ int main(int argc, char *argv[])
         log_error("Failed to initialize USB subsystem");
         return 1;
     }
-    if (detect_device(&dev) < 0) {
+    if (detect_device(&dev, &opts) < 0) {
         usb_dfu_cleanup();
         return 1;
     }
