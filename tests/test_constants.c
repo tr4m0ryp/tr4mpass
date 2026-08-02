@@ -13,7 +13,7 @@ static void test_retry_constant(void)
 
 static void test_reconnect_delay(void)
 {
-    ASSERT_EQ(USB_RECONNECT_DELAY_USEC, 2000000);
+    ASSERT_EQ(USB_RECONNECT_DELAY_USEC, 8000000);
 }
 
 void run_constant_tests(void)

@@ -130,7 +130,25 @@ macos_prep_pkgconfig() {
 }
 
 install_deps_linux_apt() {
-    local apt_pkgs="libimobiledevice-dev libirecovery-1.0-dev libusb-1.0-0-dev libplist-dev libssl-dev libcurl4-openssl-dev libssh2-1-dev pkg-config build-essential"
+    local irecovery_pkg curl_dev_pkg apt_pkgs
+
+    if apt-cache show libirecovery-1.0-dev >/dev/null 2>&1; then
+        irecovery_pkg="libirecovery-1.0-dev"
+    elif apt-cache show libirecovery-dev >/dev/null 2>&1; then
+        irecovery_pkg="libirecovery-dev"
+    else
+        irecovery_pkg="libirecovery-1.0-dev"
+    fi
+
+    if apt-cache show libcurl4-openssl-dev >/dev/null 2>&1; then
+        curl_dev_pkg="libcurl4-openssl-dev"
+    elif apt-cache show libcurl4-gnutls-dev >/dev/null 2>&1; then
+        curl_dev_pkg="libcurl4-gnutls-dev"
+    else
+        curl_dev_pkg="libcurl4-openssl-dev"
+    fi
+
+    apt_pkgs="libimobiledevice-dev $irecovery_pkg libusb-1.0-0-dev libplist-dev libssl-dev $curl_dev_pkg libssh2-1-dev pkg-config build-essential usbutils usbmuxd"
     msg_info "Installing dependencies via apt..."
     sudo apt-get update -qq
     sudo apt-get install -y $apt_pkgs
@@ -317,31 +335,101 @@ check_wsl_usb_passthrough() {
     fi
 }
 
+start_usbipd_auto_attach() {
+    # On WSL, launch usbipd auto-attach in the background so the device
+    # is automatically re-attached after each USB reset during the exploit.
+    # This is critical for checkm8: the exploit intentionally resets the
+    # USB bus, and usbipd drops the attachment on every disconnect.
+    #
+    # Uses --hardware-id 05ac:1227 (Apple DFU VID:PID) so we don't need
+    # to know the bus ID.  Runs via powershell.exe (Windows-side) with
+    # the process in a hidden window so there's no visible popup.
+    #
+    # Returns the Windows PID in USBIPD_AUTOATTACH_PID, or empty string
+    # on failure (non-fatal -- exploit may still succeed on first try).
+    USBIPD_AUTOATTACH_PID=""
+    if [ "$DETECTED_OS" != "wsl" ]; then
+        return 0
+    fi
+    if ! command -v powershell.exe >/dev/null 2>&1; then
+        return 0
+    fi
+    msg_info "Starting usbipd auto-attach (keeps device visible after USB resets)..."
+    USBIPD_AUTOATTACH_PID=$(
+        powershell.exe -NoProfile -Command \
+            'Start-Process -FilePath usbipd -ArgumentList "attach","--hardware-id","05ac:1227","--wsl","--auto-attach" -WindowStyle Hidden -PassThru | Select-Object -ExpandProperty Id' \
+            2>/dev/null | tr -d '\r\n'
+    ) || USBIPD_AUTOATTACH_PID=""
+    if [ -n "$USBIPD_AUTOATTACH_PID" ]; then
+        msg_ok "usbipd auto-attach running (PID $USBIPD_AUTOATTACH_PID)."
+    else
+        msg_warn "Could not start usbipd auto-attach; exploit retries may fail if device resets."
+    fi
+}
+
+stop_usbipd_auto_attach() {
+    if [ -z "${USBIPD_AUTOATTACH_PID:-}" ]; then
+        return 0
+    fi
+    powershell.exe -NoProfile -Command \
+        "Stop-Process -Id $USBIPD_AUTOATTACH_PID -Force -ErrorAction SilentlyContinue" \
+        2>/dev/null || true
+    USBIPD_AUTOATTACH_PID=""
+}
+
+ensure_usbmuxd() {
+    # usbmuxd is required for idevice_id to see normal-mode devices.
+    # If it's not running, attempt a non-interactive start (never block
+    # for a sudo password -- if it fails we fall back gracefully).
+    if ! command -v usbmuxd >/dev/null 2>&1; then
+        return 0  # not installed; check_normal will fail gracefully
+    fi
+    if ! pgrep -x usbmuxd >/dev/null 2>&1; then
+        msg_info "usbmuxd not running, attempting to start it..."
+        # -n = non-interactive: fail immediately instead of prompting
+        sudo -n usbmuxd 2>/dev/null || usbmuxd 2>/dev/null || true
+        sleep 1
+        if pgrep -x usbmuxd >/dev/null 2>&1; then
+            msg_ok "usbmuxd started."
+        else
+            msg_warn "Could not start usbmuxd automatically."
+            msg_info "Normal-mode detection may not work. Try: sudo usbmuxd"
+        fi
+    fi
+}
+
 wait_for_device() {
     local timeout=60
     local elapsed=0
     local interval=2
-    local wsl_warned=0
 
     msg_info "Connect your iOS device via USB cable."
     echo ""
 
+    # Ensure usbmuxd is running so idevice_id can see normal-mode devices.
+    if [ "$DETECTED_OS" = "linux" ] || [ "$DETECTED_OS" = "wsl" ]; then
+        ensure_usbmuxd
+    fi
+
+    # On WSL show the USB passthrough instructions up front so the user
+    # sees them immediately, rather than discovering them mid-poll.
+    if [ "$DETECTED_OS" = "wsl" ]; then
+        check_wsl_usb_passthrough
+        echo ""
+    fi
+
     while [ $elapsed -lt $timeout ]; do
         if check_dfu; then
             DEVICE_MODE="dfu"
+            echo ""
             msg_ok "Device detected in DFU mode!"
             return 0
         fi
         if check_normal; then
             DEVICE_MODE="normal"
+            echo ""
             msg_ok "Device detected in normal mode!"
             return 0
-        fi
-        if [ "$DETECTED_OS" = "wsl" ] && [ "$wsl_warned" -eq 0 ] && [ "$elapsed" -ge "$interval" ]; then
-            echo ""
-            check_wsl_usb_passthrough
-            echo ""
-            wsl_warned=1
         fi
         printf "\r${CYAN}[*]${RESET} Waiting for device... %ds / %ds" "$elapsed" "$timeout"
         sleep "$interval"
@@ -359,27 +447,82 @@ wait_for_device() {
 
 parse_device_info() {
     local output
+    local dfu_serial_fallback
+
+    DEV_MODEL="" DEV_CHIP_NAME="" DEV_CPID="" DEV_ECID="" DEV_IOS=""
+    DEV_SERIAL="" DEV_IMEI="" DEV_CHECKM8="" DEV_DFU=""
+    DEV_BYPASS="(none)"
+    DEV_STATUS="UNSUPPORTED"
+
+    # On Linux/WSL DFU, prefer lsusb directly so the wrapper does not
+    # consume a libusb session before the real exploit starts.
+    if [ "$DEVICE_MODE" = "dfu" ] && command -v lsusb >/dev/null 2>&1; then
+        dfu_serial_fallback="$(
+            lsusb -v -d 05ac:1227 2>/dev/null |
+            sed -n 's/.*iSerial[[:space:]]\+[0-9]\+[[:space:]]\+//p' |
+            grep 'CPID:' | head -n1
+        )"
+        if [ -n "$dfu_serial_fallback" ]; then
+            DEV_SERIAL="$dfu_serial_fallback"
+            DEV_CPID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*CPID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
+            DEV_ECID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*ECID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
+            DEV_DFU="YES"
+            msg_warn "Using DFU serial info from lsusb to avoid a pre-exploit libusb probe."
+        fi
+    fi
+
+    if [ "$DEVICE_MODE" = "dfu" ] && [ -n "$DEV_CPID" ] && [ "$DEV_CPID" != "0x0000" ]; then
+        case "${DEV_CPID#0x}" in
+            8950|8955|8947|7002|8002|8960|7000|7001|8000|8003|8001|8010|8011|8012|8015)
+                DEV_CHECKM8="YES"
+                DEV_BYPASS="Path A (checkm8, A5-A11)"
+                DEV_STATUS="SUPPORTED"
+                ;;
+            *)
+                DEV_CHECKM8="NO"
+                DEV_BYPASS="Path B (identity, A12+)"
+                DEV_STATUS="SUPPORTED"
+                ;;
+        esac
+        return 0
+    fi
+
     output="$("$BINARY" --detect-only 2>&1)" || true
 
     if [ -z "$output" ]; then
         msg_err "Device query returned no output (binary may have crashed or device disconnected)."
         msg_info "Ensure the device is still connected and try again."
         msg_info "On Linux: check that usbmuxd is running: sudo systemctl status usbmuxd"
-        DEV_MODEL="" DEV_CHIP_NAME="" DEV_CPID="" DEV_IOS=""
-        DEV_SERIAL="" DEV_IMEI="" DEV_CHECKM8="" DEV_DFU=""
-        DEV_BYPASS="(none)"
-        DEV_STATUS="UNSUPPORTED"
         return 0
     fi
 
     DEV_MODEL="$(echo "$output" | grep "Product Type:" | sed 's/.*Product Type:[[:space:]]*//')"
     DEV_CHIP_NAME="$(echo "$output" | grep "Chip Name:" | sed 's/.*Chip Name:[[:space:]]*//')"
     DEV_CPID="$(echo "$output" | grep "CPID:" | sed 's/.*CPID:[[:space:]]*//')"
+    DEV_ECID="$(echo "$output" | grep "ECID:" | sed 's/.*ECID:[[:space:]]*//')"
     DEV_IOS="$(echo "$output" | grep "iOS Version:" | sed 's/.*iOS Version:[[:space:]]*//')"
     DEV_SERIAL="$(echo "$output" | grep "Serial:" | sed 's/.*Serial:[[:space:]]*//')"
     DEV_IMEI="$(echo "$output" | grep "IMEI:" | sed 's/.*IMEI:[[:space:]]*//')"
     DEV_CHECKM8="$(echo "$output" | grep "checkm8 vuln:" | sed 's/.*checkm8 vuln:[[:space:]]*//')"
     DEV_DFU="$(echo "$output" | grep "DFU Mode:" | sed 's/.*DFU Mode:[[:space:]]*//')"
+
+    # Fallback: if libusb string descriptor reads time out, parse CPID/ECID
+    # from lsusb's iSerial line so the exploit can proceed with --cpid/--ecid.
+    if [ "$DEVICE_MODE" = "dfu" ] &&
+       { [ -z "$DEV_CPID" ] || [ "$DEV_CPID" = "0x0000" ]; } &&
+       command -v lsusb >/dev/null 2>&1; then
+        dfu_serial_fallback="$(
+            lsusb -v -d 05ac:1227 2>/dev/null |
+            sed -n 's/.*iSerial[[:space:]]\+[0-9]\+[[:space:]]\+//p' |
+            grep 'CPID:' | head -n1
+        )"
+        if [ -n "$dfu_serial_fallback" ]; then
+            DEV_SERIAL="$dfu_serial_fallback"
+            DEV_CPID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*CPID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
+            DEV_ECID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*ECID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
+            msg_warn "Using DFU serial fallback from lsusb (libusb descriptor reads timed out)."
+        fi
+    fi
 
     if [ "$DEV_CHECKM8" = "YES" ]; then
         DEV_BYPASS="Path A (checkm8, A5-A11)"

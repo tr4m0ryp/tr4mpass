@@ -139,6 +139,10 @@ void curl_easy_cleanup(CURL *handle)
     free(e);
 }
 
+/* Modern curl.h wraps these two functions in __extension__ type-checking
+ * macros.  Undefine them so our mock function definitions are visible to
+ * the linker without the macro interfering. */
+#undef curl_easy_setopt
 CURLcode curl_easy_setopt(CURL *handle, CURLoption option, ...)
 {
     struct mock_curl_easy *e = (struct mock_curl_easy *)handle;
@@ -211,6 +215,7 @@ CURLcode curl_easy_perform(CURL *handle)
     return CURLE_OK;
 }
 
+#undef curl_easy_getinfo
 CURLcode curl_easy_getinfo(CURL *handle, CURLINFO info, ...)
 {
     struct mock_curl_easy *e = (struct mock_curl_easy *)handle;
