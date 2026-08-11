@@ -243,7 +243,6 @@ int path_b_write_serial_irecovery(device_info_t *dev, const char *new_serial)
     irecv_client_t client = NULL;
     irecv_error_t  err;
     int            mode = 0;
-    char           cmd[DFU_SERIAL_MAX + 32];
     int            rc = -1;
 
     if (!dev || !new_serial) {
@@ -293,8 +292,6 @@ int path_b_write_serial_irecovery(device_info_t *dev, const char *new_serial)
                  irecv_strerror(err));
     else
         log_info("[path_b_id] Serial persisted to NVRAM via saveenv");
-
-    (void)cmd; /* cmd buffer no longer needed -- keeping for future use */
 
     log_info("[path_b_id] Serial set via iRecovery: %s", new_serial);
     rc = 0;
