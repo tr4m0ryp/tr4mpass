@@ -20,10 +20,16 @@ struct resp_buf {
     size_t   len;
 };
 
+#define MAX_RESPONSE_BYTES (4U * 1024U * 1024U)
+
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *ud)
 {
     struct resp_buf *b = ud;
     size_t add = size * nmemb;
+    if (b->len + add > MAX_RESPONSE_BYTES) {
+        log_error("[session_online] Response exceeds 4 MB limit, aborting");
+        return 0;
+    }
     uint8_t *tmp = realloc(b->data, b->len + add + 1);
     if (!tmp) return 0;
     b->data = tmp;
@@ -57,6 +63,7 @@ static int http_post(const char *url,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA,      out);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,        HTTP_TIMEOUT_SECS);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
 
     CURLcode rc = curl_easy_perform(curl);
 
@@ -197,9 +204,7 @@ int session_device_activation_online(device_info_t *dev,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
 /* Probe: dump IngestBody fields + drmHandshake only (no FMiP trigger) */
-/* ------------------------------------------------------------------ */
 
 /*
  * Print every key/value from the IngestBody JSON.  Uses a simple
