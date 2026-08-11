@@ -157,6 +157,12 @@ int afc_read_file(afc_client_t client, const char *path,
     }
 
     afc_file_close(client, handle);
+
+    if (total_read < max_len)
+        buf[total_read] = '\0';
+    else
+        buf[max_len - 1] = '\0';
+
     return (int)total_read;
 }
 
