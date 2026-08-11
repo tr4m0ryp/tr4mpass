@@ -28,6 +28,17 @@
 /* Module-global libusb context */
 static libusb_context *g_ctx = NULL;
 
+/*
+ * Serial descriptor cached before interface claim.
+ * libusb_get_string_descriptor_ascii succeeds on the default control
+ * pipe without any interface being claimed.  After libusb_claim_interface
+ * is called some USB-IP / usbipd stacks reconfigure their virtual device
+ * state and the same read returns 0 bytes.  Reading once before claiming
+ * and caching the result works around this.
+ */
+static char    g_pre_claim_serial[DFU_SERIAL_MAX];
+static uint8_t g_pre_claim_iserial_idx;
+
 int usb_dfu_init(void)
 {
     int ret;
@@ -53,6 +64,11 @@ void usb_dfu_cleanup(void)
         libusb_exit(g_ctx);
         g_ctx = NULL;
     }
+}
+
+libusb_context *usb_dfu_ctx(void)
+{
+    return g_ctx;
 }
 
 int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
@@ -100,6 +116,47 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
                      libusb_get_bus_number(devs[i]),
                      libusb_get_device_address(devs[i]),
                      (unsigned)desc.iSerialNumber);
+
+            /*
+             * Read the serial string descriptor NOW, before claiming the
+             * interface.  On usbipd-win, libusb_claim_interface causes
+             * the virtual device to drop into a state where descriptor
+             * reads on EP0 return 0 bytes.  Cache the result for
+             * usb_dfu_read_info() to use as its primary source.
+             *
+             * Brief settle delay: usbipd establishes its vhci_hcd TCP
+             * channel asynchronously after libusb_open returns.  Without
+             * this delay the first control transfer times out even though
+             * the device is physically present.
+             */
+            usleep(500000);  /* 500 ms: let usbipd vhci channel settle */
+            g_pre_claim_serial[0] = '\0';
+            g_pre_claim_iserial_idx = desc.iSerialNumber;
+            if (desc.iSerialNumber != 0) {
+                int n = 0;
+                int attempt;
+                for (attempt = 0; attempt < 5; attempt++) {
+                    n = libusb_get_string_descriptor_ascii(
+                            *handle, desc.iSerialNumber,
+                            (unsigned char *)g_pre_claim_serial,
+                            (int)sizeof(g_pre_claim_serial) - 1);
+                    if (n > 0)
+                        break;
+                    if (attempt < 4)
+                        usleep(200000);  /* usbipd control pipe may still be initializing */
+                }
+                if (n > 0) {
+                    g_pre_claim_serial[n] = '\0';
+                    log_debug("pre-claim serial (idx %u): %s",
+                              (unsigned)desc.iSerialNumber, g_pre_claim_serial);
+                } else {
+                    g_pre_claim_serial[0] = '\0';
+                    log_debug("pre-claim serial read failed after retries (idx %u): %s",
+                              (unsigned)desc.iSerialNumber,
+                              n < 0 ? libusb_strerror(n) : "empty");
+                }
+            }
+
             found = 1;
             break;
         }
@@ -112,12 +169,33 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
         return -1;
     }
 
-    libusb_detach_kernel_driver(*handle, 0);  /* Linux: detach kernel driver; ignore error */
+    (void)libusb_detach_kernel_driver(*handle, 0);
 
     /* Claim interface 0 (DFU interface) */
-    int ret = libusb_claim_interface(*handle, 0);
-    if (ret != LIBUSB_SUCCESS)
-        log_warn("failed to claim interface 0: %s (continuing anyway)", libusb_strerror(ret));
+    {
+        int ret = libusb_claim_interface(*handle, 0);
+        if (ret == LIBUSB_ERROR_BUSY) {
+            log_warn("claim interface 0 busy -- forcing usbipd reattach to clear stale state");
+            libusb_close(*handle);
+            *handle = NULL;
+
+            libusb_free_device_list(devs, 1);
+            devs = NULL;
+
+            if (getenv("WSL_DISTRO_NAME")) {
+                (void)system("powershell.exe -NoProfile -NonInteractive -Command "
+                       "'try { usbipd detach --hardware-id 05ac:1227 2>$null } catch {}; "
+                       "Start-Sleep -Milliseconds 2000; "
+                       "try { usbipd attach --hardware-id 05ac:1227 --wsl 2>$null } catch {}' "
+                       ">/dev/null 2>&1");
+                sleep(3);
+            }
+            return -1;
+        }
+        if (ret != LIBUSB_SUCCESS)
+            log_warn("failed to claim interface 0: %s (continuing anyway)",
+                     libusb_strerror(ret));
+    }
 
     return 0;
 }
@@ -143,6 +221,46 @@ static int parse_hex_field(const char *serial, const char *key, uint64_t *out)
 }
 
 /*
+ * Fallback descriptor reader for usbipd/libusb stacks where
+ * libusb_get_string_descriptor_ascii() times out while fetching language IDs.
+ * Reads the UTF-16LE string directly with a fixed langid and converts to ASCII.
+ */
+static int read_string_descriptor_utf16_ascii(libusb_device_handle *handle,
+                                              uint8_t index,
+                                              unsigned char *buf, size_t buf_len)
+{
+    unsigned char raw[DFU_SERIAL_MAX * 2];
+    int ret;
+    int raw_len;
+    int out = 0;
+    int i;
+
+    if (!handle || !buf || buf_len < 2 || index == 0)
+        return LIBUSB_ERROR_INVALID_PARAM;
+
+    ret = libusb_get_string_descriptor(handle, index, 0x0409, raw, (int)sizeof(raw));
+    if (ret < 0)
+        return ret;
+    raw_len = ret;
+    if (raw_len < 2 || raw[1] != LIBUSB_DT_STRING)
+        return LIBUSB_ERROR_IO;
+
+    for (i = 2; i + 1 < raw_len && out < (int)buf_len - 1; i += 2) {
+        unsigned char lo = raw[i];
+        unsigned char hi = raw[i + 1];
+        if (hi == 0 && lo >= 0x20 && lo <= 0x7E) {
+            buf[out++] = lo;
+        } else if (hi == 0 && (lo == '\r' || lo == '\n' || lo == '\t')) {
+            buf[out++] = lo;
+        } else {
+            buf[out++] = '?';
+        }
+    }
+    buf[out] = '\0';
+    return out;
+}
+
+/*
  * try_read_serial_descriptor -- Read one string descriptor at `index`
  * into buf (NUL-terminated on success).  Retries transient PIPE/TIMEOUT
  * errors up to twice.  Returns the number of ASCII bytes read (>=0) on
@@ -163,6 +281,13 @@ static int try_read_serial_descriptor(libusb_device_handle *handle,
     for (attempt = 0; attempt < 3; attempt++) {
         ret = libusb_get_string_descriptor_ascii(handle, index,
                                                  buf, (int)buf_len);
+        if (ret > 0)
+            break;
+        if (ret == 0 || ret == LIBUSB_ERROR_TIMEOUT) {
+            int fb = read_string_descriptor_utf16_ascii(handle, index, buf, buf_len);
+            if (fb > 0)
+                return fb;
+        }
         if (ret >= 0)
             break;
         if (ret != LIBUSB_ERROR_PIPE && ret != LIBUSB_ERROR_TIMEOUT)
@@ -205,60 +330,79 @@ int usb_dfu_read_info(libusb_device_handle *handle, uint8_t iserial_hint,
      * Build a deduplicated probe order.  Hint first (typically the
      * device's own bDeviceDescriptor.iSerialNumber), then the two
      * legacy indices that cover every shipped Apple iBoot layout.
+     *
+     * Special case: if a pre-claim serial was cached in usb_dfu_find,
+     * use it directly when the hint index matches, avoiding a descriptor
+     * read on the now-claimed interface (which may return 0 on usbipd).
      */
-    if (iserial_hint != 0)
-        probe_order[probe_count++] = iserial_hint;
-    if (DFU_SERIAL_LEGACY_A != iserial_hint)
-        probe_order[probe_count++] = DFU_SERIAL_LEGACY_A;
-    if (DFU_SERIAL_LEGACY_B != iserial_hint &&
-        DFU_SERIAL_LEGACY_B != DFU_SERIAL_LEGACY_A)
-        probe_order[probe_count++] = DFU_SERIAL_LEGACY_B;
+    if (iserial_hint != 0 &&
+        g_pre_claim_serial[0] != '\0' &&
+        g_pre_claim_iserial_idx == iserial_hint &&
+        strstr(g_pre_claim_serial, "CPID:") != NULL) {
 
-    for (i = 0; i < probe_count; i++) {
-        uint8_t idx = probe_order[i];
-        int ret;
-
-        /* Skip if we already tried this index (defensive; the dedupe
-         * above should have caught it). */
-        int already = 0;
-        for (j = 0; j < i; j++) {
-            if (probe_order[j] == idx) { already = 1; break; }
-        }
-        if (already)
-            continue;
-
-        ret = try_read_serial_descriptor(handle, idx, buf, sizeof(buf));
-        if (ret <= 0) {
-            log_debug("serial descriptor idx %u: %s",
-                      (unsigned)idx,
-                      ret == 0 ? "empty" : libusb_strerror(ret));
-            continue;
-        }
-
-        if (ret >= (int)sizeof(buf))
-            ret = (int)sizeof(buf) - 1;
-        buf[ret] = '\0';
+        log_debug("usb_dfu_read_info: using pre-claim serial cache (idx %u): %s",
+                  (unsigned)iserial_hint, g_pre_claim_serial);
+        chosen_len = (int)strlen(g_pre_claim_serial);
+        memcpy(buf, g_pre_claim_serial, (size_t)chosen_len + 1);
         any_success = 1;
-        log_debug("DFU serial string (idx %u): %s", (unsigned)idx, (char *)buf);
-
-        /*
-         * When the read returns the human-readable product string, the
-         * device exposed CPID/ECID at a different descriptor.  Record
-         * the last one we saw so the sentinel diagnostic can still
-         * report what the user is seeing, then keep probing.
-         */
-        if (strncmp((char *)buf, "Apple Mobile Device", 19) == 0) {
-            memcpy(sentinel_buf, buf, (size_t)ret + 1);
-            sentinel_len = ret;
-            continue;
-        }
-
-        /* Non-product string: this is the descriptor we want. */
         all_product_string = 0;
-        chosen_len = ret;
-        log_info("DFU serial descriptor resolved at index %u", (unsigned)idx);
-        break;
     }
+
+    if (!any_success) {
+        if (iserial_hint != 0)
+            probe_order[probe_count++] = iserial_hint;
+        if (DFU_SERIAL_LEGACY_A != iserial_hint)
+            probe_order[probe_count++] = DFU_SERIAL_LEGACY_A;
+        if (DFU_SERIAL_LEGACY_B != iserial_hint &&
+            DFU_SERIAL_LEGACY_B != DFU_SERIAL_LEGACY_A)
+            probe_order[probe_count++] = DFU_SERIAL_LEGACY_B;
+
+        for (i = 0; i < probe_count; i++) {
+            uint8_t idx = probe_order[i];
+            int ret;
+
+            /* Skip if we already tried this index (defensive; the dedupe
+             * above should have caught it). */
+            int already = 0;
+            for (j = 0; j < i; j++) {
+                if (probe_order[j] == idx) { already = 1; break; }
+            }
+            if (already)
+                continue;
+
+            ret = try_read_serial_descriptor(handle, idx, buf, sizeof(buf));
+            if (ret <= 0) {
+                log_debug("serial descriptor idx %u: %s",
+                          (unsigned)idx,
+                          ret == 0 ? "empty" : libusb_strerror(ret));
+                continue;
+            }
+
+            if (ret >= (int)sizeof(buf))
+                ret = (int)sizeof(buf) - 1;
+            buf[ret] = '\0';
+            any_success = 1;
+            log_debug("DFU serial string (idx %u): %s", (unsigned)idx, (char *)buf);
+
+            /*
+             * When the read returns the human-readable product string, the
+             * device exposed CPID/ECID at a different descriptor.  Record
+             * the last one we saw so the sentinel diagnostic can still
+             * report what the user is seeing, then keep probing.
+             */
+            if (strncmp((char *)buf, "Apple Mobile Device", 19) == 0) {
+                memcpy(sentinel_buf, buf, (size_t)ret + 1);
+                sentinel_len = ret;
+                continue;
+            }
+
+            /* Non-product string: this is the descriptor we want. */
+            all_product_string = 0;
+            chosen_len = ret;
+            log_info("DFU serial descriptor resolved at index %u", (unsigned)idx);
+            break;
+        }
+    } /* end if (!any_success) probe loop */
 
     if (!any_success) {
         log_error("failed to read serial descriptor at any probed index");
@@ -393,5 +537,10 @@ void usb_dfu_close(libusb_device_handle *handle)
 
     libusb_release_interface(handle, 0);
     libusb_close(handle);
+    /* Invalidate the pre-claim serial cache so the next usb_dfu_find
+     * reads a fresh descriptor (important after exploit -- the serial
+     * may now contain "PWND:" which the stale cache would hide). */
+    g_pre_claim_serial[0] = '\0';
+    g_pre_claim_iserial_idx = 0;
     log_debug("DFU device handle closed");
 }
