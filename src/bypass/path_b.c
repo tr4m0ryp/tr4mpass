@@ -78,6 +78,80 @@ static int path_b_probe(device_info_t *dev)
 }
 
 /*
+ * step_check_jailbreak -- Check if device has patched mobileactivationd.
+ *
+ * Path B REQUIRES a jailbroken device with patched mobileactivationd.
+ * Without it, the session activation will always fail with error -5.
+ * 
+ * IMPORTANT: Must be called AFTER step_reboot_to_normal() because
+ * session_get_info() needs dev->handle (idevice connection) which
+ * only exists in Normal Mode, not DFU.
+ */
+static int step_check_jailbreak(device_info_t *dev)
+{
+    plist_t state = NULL;
+    plist_t jb_marker = NULL;
+    int is_jailbroken = 0;
+
+    log_info("[path_b] Step 4/10: Checking jailbreak status...");
+
+    if (!dev || !dev->handle) {
+        log_error("[path_b] No device handle -- not connected in normal mode");
+        return -1;
+    }
+
+    if (session_get_info(dev, &state) != 0 || !state) {
+        log_error("[path_b] Cannot retrieve session info -- device not ready");
+        return -1;
+    }
+
+    /*
+     * On a patched mobileactivationd, the session_info often contains
+     * additional debug/diagnostic fields. On stock iOS, serverKP is
+     * typically present in the handshake but not in the initial session info.
+     * Its absence is a hint, but not conclusive.
+     */
+    jb_marker = plist_dict_get_item(state, "serverKP");
+    if (jb_marker) {
+        log_info("[path_b] serverKP present in session info -- daemon may be patched");
+        is_jailbroken = 1;
+    } else {
+        log_warn("[path_b] serverKP NOT in session info -- daemon likely STOCK");
+        log_warn("[path_b] Path B requires patched mobileactivationd (jailbreak)");
+    }
+
+    /*
+     * Additional check: Look for FairPlay certificate chain structure.
+     */
+    plist_t cert_node = plist_dict_get_item(state, "ActivationCert");
+    if (cert_node) {
+        char *cert_data = NULL;
+        uint64_t cert_len = 0;
+        plist_get_data_val(cert_node, &cert_data, &cert_len);
+        if (cert_data && cert_len > 0) {
+            log_debug("[path_b] ActivationCert present (%llu bytes)",
+                      (unsigned long long)cert_len);
+        }
+        if (cert_data) free(cert_data);
+    }
+
+    plist_free(state);
+
+    if (!is_jailbroken) {
+        log_error("[path_b] PATH B REQUIRES JAILBREAK");
+        log_error("[path_b] Your device is NOT jailbroken or mobileactivationd");
+        log_error("[path_b] is not patched. Path B cannot work without a");
+        log_error("[path_b] patched daemon that accepts local responses.");
+        log_error("[path_b] iOS 16.7.2 on A15 is currently NOT jailbreakable.");
+        log_error("[path_b] Consider online activation instead.");
+        return -1;
+    }
+
+    log_info("[path_b] Jailbreak check passed -- proceeding with Path B");
+    return 0;
+}
+
+/*
  * step_reboot_to_recovery -- Step 1/10: transition device from DFU to
  * recovery mode so that iRecovery setenv commands become available.
  *
@@ -237,26 +311,42 @@ static int step_reboot_to_normal(device_info_t *dev)
         return -1;
     }
 
-    /* Reconnect via lockdownd to populate dev->handle / dev->lockdown */
-    if (device_detect(dev) < 0) {
-        log_error("[path_b] device_detect failed after reboot");
+    /* Reconnect via lockdownd with retry logic */
+    int retry = 0;
+    int connected = -1;
+    while (retry < 5 && connected != 0) {
+        connected = device_detect(dev);
+        if (connected != 0) {
+            log_debug("[path_b] device_detect attempt %d failed, retrying...", retry + 1);
+            sleep(3);
+            retry++;
+        }
+    }
+    if (connected != 0) {
+        log_error("[path_b] device_detect failed after %d attempts", retry);
         return -1;
     }
+
     if (device_query_info(dev) < 0)
         log_warn("[path_b] device_query_info incomplete (continuing)");
 
+    /* Verbinde zu lockdownd */
+    if (device_connect_lockdownd(dev) != 0) {
+        log_error("[path_b] Failed to connect to lockdownd");
+        return -1;
+    }
     log_info("[path_b] Reconnected in normal mode, lockdownd available");
     return 0;
 }
 
 /*
- * step_detect_signal -- Steps 4-5: detect and display signal info.
+ * step_detect_signal -- Step 5/10: detect and display signal info.
  */
 static int step_detect_signal(device_info_t *dev)
 {
     signal_type_t sig;
 
-    log_info("[path_b] Step 4/10: Detecting signal type...");
+    log_info("[path_b] Step 5/10: Detecting signal type...");
 
     sig = signal_detect_type(dev);
     (void)sig; /* Used implicitly by signal_print_info */
@@ -266,7 +356,7 @@ static int step_detect_signal(device_info_t *dev)
 }
 
 /*
- * step_session_handshake -- Steps 4-6: session info + drmHandshake + activation info.
+ * step_session_handshake -- Steps 6-8: session info + drmHandshake + activation info.
  * On success, *out_response and *out_info are set (caller must free both).
  */
 static int step_session_handshake(device_info_t *dev,
@@ -278,8 +368,8 @@ static int step_session_handshake(device_info_t *dev,
     plist_t info     = NULL;
     int     rc;
 
-    /* Step 5: get session info blob from device */
-    log_info("[path_b] Step 5/10: Requesting session info...");
+    /* Step 6: get session info blob from device */
+    log_info("[path_b] Step 6/10: Requesting session info...");
     rc = session_get_info(dev, &session);
     if (rc != 0 || !session) {
         log_error("[path_b] Failed to get session info");
@@ -287,8 +377,8 @@ static int step_session_handshake(device_info_t *dev,
     }
     log_info("[path_b] Session info retrieved");
 
-    /* Step 6: perform local drmHandshake */
-    log_info("[path_b] Step 6/10: Performing drmHandshake...");
+    /* Step 7: perform local drmHandshake */
+    log_info("[path_b] Step 7/10: Performing drmHandshake...");
     rc = session_drm_handshake(dev, session, &response);
     if (rc != 0 || !response) {
         log_error("[path_b] drmHandshake failed");
@@ -297,8 +387,8 @@ static int step_session_handshake(device_info_t *dev,
     }
     log_info("[path_b] drmHandshake succeeded");
 
-    /* Step 7: create activation info with session response */
-    log_info("[path_b] Step 7/10: Creating activation info...");
+    /* Step 8: create activation info with session response */
+    log_info("[path_b] Step 8/10: Creating activation info...");
     rc = session_create_activation_info(dev, response, &info);
     if (rc != 0 || !info) {
         log_error("[path_b] Failed to create activation info");
@@ -316,14 +406,14 @@ static int step_session_handshake(device_info_t *dev,
 }
 
 /*
- * step_activate -- Step 7: build A12+ record and activate with session.
+ * step_activate -- Step 9: build A12+ record and activate with session.
  */
 static int step_activate(device_info_t *dev, plist_t response)
 {
     plist_t record = NULL;
     int     rc;
 
-    log_info("[path_b] Step 8/10: Building A12+ activation record...");
+    log_info("[path_b] Step 9/10: Building A12+ activation record...");
     record = record_build_a12(dev);
     if (!record) {
         log_error("[path_b] Failed to build A12+ activation record");
@@ -345,13 +435,13 @@ static int step_activate(device_info_t *dev, plist_t response)
 }
 
 /*
- * step_deletescript -- Step 8: run post-bypass cleanup.
+ * step_deletescript -- Step 10: run post-bypass cleanup.
  */
 static int step_deletescript(device_info_t *dev)
 {
     int rc;
 
-    log_info("[path_b] Step 9/10: Running deletescript cleanup...");
+    log_info("[path_b] Step 10/10: Running deletescript cleanup...");
 
     rc = deletescript_run(dev);
     if (rc != 0) {
@@ -366,13 +456,13 @@ static int step_deletescript(device_info_t *dev)
 }
 
 /*
- * step_verify -- Step 9: check if activation was successful.
+ * step_verify -- Verify activation state (post-cleanup).
  */
 static int step_verify(device_info_t *dev)
 {
     int rc;
 
-    log_info("[path_b] Step 10/10: Verifying activation state...");
+    log_info("[path_b] Verifying activation state...");
 
     rc = activation_is_activated(dev);
     if (rc == 1) {
@@ -421,17 +511,28 @@ static int path_b_execute(device_info_t *dev)
     if (rc != 0)
         return -1;
 
-    /* Step 4: signal detection (lockdownd now available) */
+    /*
+     * NEW: Jailbreak check moved HERE (Step 4).
+     * Must be after step_reboot_to_normal() because session_get_info()
+     * needs dev->handle (idevice connection) which only exists in Normal Mode.
+     */
+    rc = step_check_jailbreak(dev);
+    if (rc != 0) {
+        log_error("[path_b] === Path B aborted: device not jailbroken ===");
+        return -1;
+    }
+
+    /* Step 5: signal detection (lockdownd now available) */
     rc = step_detect_signal(dev);
     if (rc != 0)
         return -1;
 
-    /* Steps 5-7: session handshake */
+    /* Steps 6-8: session handshake */
     rc = step_session_handshake(dev, &response, &info);
     if (rc != 0)
         return -1;
 
-    /* Step 8: build record + activate */
+    /* Step 9: build record + activate */
     rc = step_activate(dev, response);
     if (rc != 0) {
         plist_free(response);
@@ -443,10 +544,10 @@ static int path_b_execute(device_info_t *dev)
     plist_free(response);
     plist_free(info);
 
-    /* Step 8: deletescript cleanup */
+    /* Step 10: deletescript cleanup */
     step_deletescript(dev);
 
-    /* Step 9: verify activation */
+    /* Verify activation */
     rc = step_verify(dev);
 
     if (rc == 0) {
