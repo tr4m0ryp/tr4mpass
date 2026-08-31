@@ -17,7 +17,9 @@
 #include "activation/activation.h"
 #include "util/log.h"
 #include "util/env_config.h"
+#include "util/errors.h"
 #include "cli/cli_flags.h"
+#include "cli/doctor.h"
 
 typedef struct {
     int verbose;
@@ -43,7 +45,8 @@ static void print_banner(void)
 
 static void print_usage(const char *prog)
 {
-    printf("Usage: %s [OPTIONS]\n\n"
+    printf("Usage: %s [OPTIONS]\n"
+           "       %s doctor [-v]      Run environment preflight diagnostics and exit\n\n"
            "Options:\n"
            "  -v, --verbose          Enable debug logging + env summary\n"
            "  -n, --dry-run          Show what would run, do not execute\n"
@@ -55,7 +58,7 @@ static void print_usage(const char *prog)
            "      --cpid <hex>       Override CPID (e.g. --cpid 0x8960)\n"
            "      --ecid <hex>       Override ECID (e.g. --ecid 0x1F70CB1331C)\n"
            "  -h, --help             Show this help message\n\n",
-           prog);
+           prog, prog);
     cli_flags_print_help();
 }
 
@@ -153,8 +156,9 @@ static int detect_device(device_info_t *dev)
 
     log_info("No DFU device found, trying normal mode...");
     if (device_detect(dev) < 0) {
-        log_error("No device detected. Is it connected via USB?");
-        return -1;
+        return err_ctx(ERR_DEVICE_UNSEEN,
+                        "No device detected on any known USB interface",
+                        "Check the USB cable/port and that the device is powered on, then run `tr4mpass doctor` to verify usbmuxd and USB visibility");
     }
     if (device_query_info(dev) < 0)
         log_warn("Incomplete device info (partial data may be available)");
@@ -192,19 +196,28 @@ static void register_modules(void)
 
 static void print_module_diagnostics(const device_info_t *dev)
 {
-    log_error("No compatible bypass module for this device");
-    log_error("  DFU=%s CPID=0x%04X Chip=%s checkm8=%s Product=%s",
-              dev->is_dfu_mode ? "YES" : "NO", dev->cpid,
-              dev->chip_name[0] ? dev->chip_name : "(unknown)",
-              dev->checkm8_vulnerable ? "YES" : "NO",
-              dev->product_type[0] ? dev->product_type : "(unknown)");
+    char diag[256];
 
-    if (!dev->is_dfu_mode)
-        log_error("Both paths require DFU mode. Use ./start.sh or enter DFU manually.");
-    else if (dev->cpid == 0)
-        log_error("CPID is 0x0000 -- try --cpid to set manually.");
-    else if (dev->chip_name[0] == '\0' || strcmp(dev->chip_name, "Unknown") == 0)
-        log_error("Chip CPID 0x%04X not in database.", dev->cpid);
+    snprintf(diag, sizeof(diag),
+             "No compatible bypass module (DFU=%s CPID=0x%04X Chip=%s checkm8=%s Product=%s)",
+             dev->is_dfu_mode ? "YES" : "NO", dev->cpid,
+             dev->chip_name[0] ? dev->chip_name : "(unknown)",
+             dev->checkm8_vulnerable ? "YES" : "NO",
+             dev->product_type[0] ? dev->product_type : "(unknown)");
+
+    if (!dev->is_dfu_mode) {
+        err_ctx(ERR_DFU_MODE, diag,
+                "Both paths require DFU mode -- use ./start.sh or enter DFU manually");
+    } else if (dev->cpid == 0) {
+        err_ctx(ERR_CPID_UNPARSED, diag,
+                "CPID is 0x0000 -- try --cpid to set it manually");
+    } else if (dev->chip_name[0] == '\0' || strcmp(dev->chip_name, "Unknown") == 0) {
+        err_ctx(ERR_CHIP_UNSUPPORTED, diag,
+                "Chip not found in the chip database");
+    } else {
+        err_ctx(ERR_CHIP_UNSUPPORTED, diag,
+                "No registered bypass module matched this device");
+    }
 }
 
 static const bypass_module_t *select_module(device_info_t *dev,
@@ -233,6 +246,21 @@ int main(int argc, char *argv[])
     cli_opts_t opts;
     device_info_t dev;
     int ret;
+
+    /*
+     * `tr4mpass doctor` is a standalone preflight report -- it needs
+     * no USB init, no device detect, and no getopt parsing of the
+     * normal bypass-pipeline flags. Dispatch to it before anything
+     * else in main() runs.
+     */
+    if (argc >= 2 && strcmp(argv[1], "doctor") == 0) {
+        int doctor_verbose = 0;
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0)
+                doctor_verbose = 1;
+        }
+        return doctor_run(doctor_verbose);
+    }
 
     print_banner();
 
@@ -381,10 +409,15 @@ ao_done:
 
     log_info("Executing module: %s", mod->name);
     ret = bypass_execute(mod, &dev);
-    if (ret == 0)
+    if (ret == 0) {
         printf("\n[+] Bypass completed successfully.\n");
-    else
-        printf("\n[-] Bypass failed (error %d).\n", ret);
+    } else {
+        char diag[128];
+        snprintf(diag, sizeof(diag), "Bypass module '%s' failed (error %d)",
+                 mod->name, ret);
+        err_ctx(ERR_EXPLOIT_FAILED, diag,
+                "Re-check DFU mode and cable/port, or retry with --force-path-a/--force-path-b or --cpid/--ecid overrides");
+    }
 
     cleanup(&dev);
     return (ret == 0) ? 0 : 1;

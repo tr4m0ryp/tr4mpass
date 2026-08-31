@@ -61,6 +61,7 @@ fi
 
 main() {
     print_banner
+    preflight_environment
     detect_os
     install_deps
     build_project
