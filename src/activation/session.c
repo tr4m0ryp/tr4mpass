@@ -88,82 +88,90 @@ static plist_t build_offline_handshake(device_info_t *dev,
     plist_t fdr_blob = NULL;
     plist_t su_info = NULL;
     plist_t hrm_node = NULL;
+    plist_t collection_blob = NULL;
+    plist_t activation_cert = NULL;
+    plist_t server_kp_node = NULL;
 
     if (!dev || !session_info) return NULL;
 
     response = plist_new_dict();
     if (!response) return NULL;
 
-    /* Extract HandshakeRequestMessage -- online would POST this to apple.com,
-     * offline echoes it back (patched daemon skips crypto validation). */
     hrm_node = plist_dict_get_item(session_info, "HandshakeRequestMessage");
-
-    /* FDRBlob: empty in offline mode -- patched daemon skips FDR check */
-    fdr_blob = plist_new_data("", 0);
-    plist_dict_set_item(response, "FDRBlob", fdr_blob);
-
-    /* SUInfo: empty dict -- not required for offline activation */
-    su_info = plist_new_dict();
-    plist_dict_set_item(response, "SUInfo", su_info);
-
-    /* HandshakeResponseMessage: echo request back (accepted post-patch) */
     if (hrm_node) {
-        plist_dict_set_item(response, "HandshakeResponseMessage",
-                            plist_copy(hrm_node));
+        plist_dict_set_item(response, "HandshakeResponseMessage", plist_copy(hrm_node));
     } else {
-        plist_dict_set_item(response, "HandshakeResponseMessage",
-                            plist_new_data("", 0));
+        plist_dict_set_item(response, "HandshakeResponseMessage", plist_new_data("", 0));
     }
 
-    /* serverKP: empty -- session encryption bypassed post-patch */
-    plist_dict_set_item(response, "serverKP",
-                        plist_new_data("", 0));
+    fdr_blob = plist_dict_get_item(session_info, "FDRBlob");
+    if (fdr_blob) {
+        plist_dict_set_item(response, "FDRBlob", plist_copy(fdr_blob));
+    } else {
+        plist_dict_set_item(response, "FDRBlob", plist_new_data("", 0));
+    }
 
-    /* Carry device UDID through the session */
-    plist_dict_set_item(response, "UniqueDeviceID",
-                        plist_new_string(dev->udid));
+    su_info = plist_dict_get_item(session_info, "SUInfo");
+    if (su_info) {
+        plist_dict_set_item(response, "SUInfo", plist_copy(su_info));
+    } else {
+        plist_dict_set_item(response, "SUInfo", plist_new_dict());
+    }
 
-    log_info("%s Built offline handshake response for UDID %s",
-             LOG_TAG, dev->udid);
+    /*
+     * FIX: serverKP must be a valid 32-byte key package.
+     * Try to reuse the one from session_info if available,
+     * otherwise generate a zero-filled 32-byte block.
+     * Length 0 was causing mobileactivationd to reject the handshake.
+     */
+    server_kp_node = plist_dict_get_item(session_info, "serverKP");
+    if (server_kp_node) {
+        plist_dict_set_item(response, "serverKP", plist_copy(server_kp_node));
+        log_debug("%s Reusing serverKP from session_info", LOG_TAG);
+    } else {
+        unsigned char server_kp[32] = {0};
+        plist_dict_set_item(response, "serverKP",
+                            plist_new_data((const char *)server_kp, sizeof(server_kp)));
+        log_debug("%s Using generated zero serverKP (32 bytes)", LOG_TAG);
+    }
 
+    collection_blob = plist_dict_get_item(session_info, "CollectionBlob");
+    if (collection_blob) {
+        plist_dict_set_item(response, "CollectionBlob", plist_copy(collection_blob));
+    } else {
+        plist_dict_set_item(response, "CollectionBlob", plist_new_data("", 0));
+    }
+
+    if (strlen(dev->udid) > 0) {
+        plist_dict_set_item(response, "UniqueDeviceID", plist_new_string(dev->udid));
+    } else {
+        plist_t udid_node = plist_dict_get_item(session_info, "UniqueDeviceID");
+        if (udid_node) {
+            plist_dict_set_item(response, "UniqueDeviceID", plist_copy(udid_node));
+        }
+    }
+
+    activation_cert = plist_dict_get_item(session_info, "ActivationCert");
+    if (activation_cert) {
+        plist_dict_set_item(response, "ActivationCert", plist_copy(activation_cert));
+    } else {
+        plist_dict_set_item(response, "ActivationCert", plist_new_data("", 0));
+    }
+
+    plist_dict_set_item(response, "ActivationState", plist_new_string("Unactivated"));
+
+    plist_t bb_info = plist_dict_get_item(session_info, "BasebandInfo");
+    if (bb_info) {
+        plist_dict_set_item(response, "BasebandInfo", plist_copy(bb_info));
+    }
+
+    log_info("%s Built offline handshake response", LOG_TAG);
     return response;
 }
 
 /* --- Public API --- */
 
-int session_get_info(device_info_t *dev, plist_t *session_info)
-{
-    mobileactivation_client_t ma = NULL;
-    mobileactivation_error_t err;
 
-    if (!dev || !session_info) {
-        log_error("%s Invalid arguments to session_get_info", LOG_TAG);
-        return -1;
-    }
-
-    *session_info = NULL;
-
-    if (ma_session_start(dev, &ma) < 0)
-        return -1;
-
-    /*
-     * CreateTunnel1SessionInfoRequest: asks the device to produce a
-     * session blob containing the CollectionBlob and
-     * HandshakeRequestMessage needed for drmHandshake.
-     */
-    err = mobileactivation_create_activation_session_info(ma, session_info);
-    mobileactivation_client_free(ma);
-
-    if (err != MOBILEACTIVATION_E_SUCCESS || !*session_info) {
-        log_error("%s create_activation_session_info failed (error %d)",
-                  LOG_TAG, (int)err);
-        *session_info = NULL;
-        return -1;
-    }
-
-    log_info("%s Retrieved session info from device", LOG_TAG);
-    return 0;
-}
 
 int session_drm_handshake(device_info_t *dev, plist_t session_info,
                           plist_t *handshake_response)
@@ -294,5 +302,56 @@ int session_activate(device_info_t *dev, plist_t activation_record,
     }
 
     log_info("%s Session activation completed successfully", LOG_TAG);
+    return 0;
+}
+
+/* --- Public API --- */
+
+int session_get_info(device_info_t *dev, plist_t *session_info)
+{
+    mobileactivation_client_t ma = NULL;
+    mobileactivation_error_t err;
+
+    if (!dev || !session_info) {
+        log_error("%s Invalid arguments to session_get_info", LOG_TAG);
+        return -1;
+    }
+
+    *session_info = NULL;
+
+    if (ma_session_start(dev, &ma) < 0)
+        return -1;
+
+    err = mobileactivation_create_activation_session_info(ma, session_info);
+    mobileactivation_client_free(ma);
+
+    if (err != MOBILEACTIVATION_E_SUCCESS || !*session_info) {
+        log_error("%s create_activation_session_info failed (error %d)",
+                  LOG_TAG, (int)err);
+        *session_info = NULL;
+        return -1;
+    }
+
+    /*
+     * FIX: Debug output moved AFTER successful retrieval.
+     * Previously this was before the API call, writing an empty file.
+     */
+    {
+        char *xml = NULL;
+        uint32_t xml_len = 0;
+        plist_to_xml(*session_info, &xml, &xml_len);
+        if (xml) {
+            FILE *f = fopen("/tmp/session_info.xml", "w");
+            if (f) {
+                fputs(xml, f);
+                fclose(f);
+                log_info("%s Session info saved to /tmp/session_info.xml (%u bytes)",
+                         LOG_TAG, (unsigned)xml_len);
+            }
+            free(xml);
+        }
+    }
+
+    log_info("%s Retrieved session info from device", LOG_TAG);
     return 0;
 }
