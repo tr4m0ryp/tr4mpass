@@ -146,7 +146,11 @@ main() {
     # In DFU mode on some WSL/usbipd stacks, descriptor reads can intermittently
     # fail even when lsusb still reports CPID/ECID.  If parse_device_info()
     # recovered fallback IDs, pass them explicitly unless caller already did.
-    local run_args=("$@")
+    
+    # FIX: Explicitly declare as an array first to satisfy 'set -u' when no arguments are passed
+    declare -a run_args=()
+    run_args=("${@}")
+    
     local has_cpid=0
     local has_ecid=0
     local arg
