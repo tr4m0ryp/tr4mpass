@@ -147,26 +147,37 @@ main() {
     # fail even when lsusb still reports CPID/ECID.  If parse_device_info()
     # recovered fallback IDs, pass them explicitly unless caller already did.
     local run_args=("$@")
+    local has_run_args=0
     local has_cpid=0
     local has_ecid=0
     local arg
-    for arg in "${run_args[@]}"; do
-        case "$arg" in
-            --cpid|--cpid=*) has_cpid=1 ;;
-            --ecid|--ecid=*) has_ecid=1 ;;
-        esac
-    done
+    # Bash 3.2 treats an empty array expansion as unbound under set -u.
+    if [ "$#" -gt 0 ]; then
+        has_run_args=1
+        for arg in "${run_args[@]}"; do
+            case "$arg" in
+                --cpid|--cpid=*) has_cpid=1 ;;
+                --ecid|--ecid=*) has_ecid=1 ;;
+            esac
+        done
+    fi
     if [ "$DEVICE_MODE" = "dfu" ]; then
         if [ $has_cpid -eq 0 ] && [ -n "${DEV_CPID:-}" ] && [ "${DEV_CPID:-}" != "0x0000" ]; then
             run_args+=("--cpid" "$DEV_CPID")
+            has_run_args=1
         fi
         if [ $has_ecid -eq 0 ] && [ -n "${DEV_ECID:-}" ] && [ "${DEV_ECID:-}" != "0x0" ]; then
             run_args+=("--ecid" "$DEV_ECID")
+            has_run_args=1
         fi
     fi
 
     # Run binary (not exec so we can clean up usbipd afterwards).
-    "$BINARY" "${run_args[@]}"
+    if [ "$has_run_args" -eq 1 ]; then
+        "$BINARY" "${run_args[@]}"
+    else
+        "$BINARY"
+    fi
     _rc=$?
     stop_usbipd_auto_attach
     exit $_rc
