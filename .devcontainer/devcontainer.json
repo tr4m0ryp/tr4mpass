@@ -1,0 +1,6 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {}
+}sudo docker run -d -p 3000:8080 -v open-webui:/app/backend/data "ghcr.io/postfinance/devcontainer-features/dotnet:1": {}--name open-webui --restart always ghcr.io/open-webui/open-webui:main
+"ghcr.io/jsburckhardt/devcontainer-features/gitai:1": {}"ghcr.io/wcgomes/devcontainer-features/agency-agents:0": {}"ghcr.io/miguelrodo/devcontainerfeatures/repos:3": {}
+"ghcr.io/jsburckhardt/devcontainer-features/gitai:1": {}"ghcr.io/wcgomes/devcontainer-features/agency-agents:0": {}"ghcr.io/miguelrodo/devcontainerfeatures/repos:3": {}
