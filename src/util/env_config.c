@@ -38,10 +38,19 @@ int env_get_int(const char *name, int default_value)
     if (v == NULL || *v == '\0')
         return default_value;
 
+    while (*v != '\0' && isspace((unsigned char)*v))
+        v++;
+    if (*v == '\0')
+        return default_value;
+
     errno = 0;
     char *end = NULL;
     long parsed = strtol(v, &end, 10);
-    if (errno != 0 || end == v || (end && *end != '\0'))
+    if (errno != 0 || end == v)
+        return default_value;
+    while (*end != '\0' && isspace((unsigned char)*end))
+        end++;
+    if (*end != '\0')
         return default_value;
     if (parsed < INT_MIN || parsed > INT_MAX)
         return default_value;

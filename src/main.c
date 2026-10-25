@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include <getopt.h>
 
 #include "tr4mpass.h"
@@ -59,6 +60,48 @@ static void print_usage(const char *prog)
     cli_flags_print_help();
 }
 
+static int parse_hex_u32_arg(const char *arg, uint32_t *out)
+{
+    char *end = NULL;
+    unsigned long v;
+
+    if (!arg || !out)
+        return -1;
+
+    errno = 0;
+    v = strtoul(arg, &end, 16);
+    if (errno != 0 || end == arg)
+        return -1;
+    while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
+        end++;
+    if (*end != '\0')
+        return -1;
+    if (v > UINT32_MAX)
+        return -1;
+    *out = (uint32_t)v;
+    return 0;
+}
+
+static int parse_hex_u64_arg(const char *arg, uint64_t *out)
+{
+    char *end = NULL;
+    unsigned long long v;
+
+    if (!arg || !out)
+        return -1;
+
+    errno = 0;
+    v = strtoull(arg, &end, 16);
+    if (errno != 0 || end == arg)
+        return -1;
+    while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
+        end++;
+    if (*end != '\0')
+        return -1;
+    *out = (uint64_t)v;
+    return 0;
+}
+
 static int parse_args(int argc, char *argv[], cli_opts_t *opts)
 {
     enum {
@@ -105,11 +148,17 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         case 'a': opts->force_path_a   = 1; break;
         case 'b': opts->force_path_b   = 1; break;
         case OPT_CPID:
-            opts->cpid_override     = (uint32_t)strtoul(optarg, NULL, 16);
+            if (parse_hex_u32_arg(optarg, &opts->cpid_override) != 0) {
+                log_error("invalid CPID override: '%s'", optarg);
+                return -1;
+            }
             opts->has_cpid_override = 1;
             break;
         case OPT_ECID:
-            opts->ecid_override     = (uint64_t)strtoull(optarg, NULL, 16);
+            if (parse_hex_u64_arg(optarg, &opts->ecid_override) != 0) {
+                log_error("invalid ECID override: '%s'", optarg);
+                return -1;
+            }
             opts->has_ecid_override = 1;
             break;
         case 'h': print_usage(argv[0]); return 1;

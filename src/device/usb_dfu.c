@@ -5,6 +5,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
@@ -209,17 +210,30 @@ static int parse_hex_field(const char *serial, const char *key, uint64_t *out)
 {
     const char *p;
     char *endptr;
+    const char *start;
 
     if (!serial || !key || !out)
         return -1;
     p = strstr(serial, key);
     if (!p)
         return -1;
+
+    start = p + strlen(key);
+    errno = 0;
     endptr = NULL;
-    *out = strtoull(p + strlen(key), &endptr, 16);
-    if (!endptr || endptr == p + strlen(key)) {
+    *out = strtoull(start, &endptr, 16);
+
+    if (errno != 0 || endptr == start) {
         log_warn("parse_hex_field: garbage value for key '%s'", key);
         *out = 0;
+        return -1;
+    }
+
+    if (*endptr != '\0' && *endptr != ' ' && *endptr != '\t' &&
+        *endptr != '\r' && *endptr != '\n') {
+        log_warn("parse_hex_field: trailing junk after key '%s'", key);
+        *out = 0;
+        return -1;
     }
     return 0;
 }
