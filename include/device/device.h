@@ -9,9 +9,22 @@
 #define DEVICE_H
 
 #include <stdint.h>
+
+#ifdef UNIT_TEST
+/*
+ * The hardware-independent unit suite intentionally builds without the
+ * libimobiledevice/libusb development packages. Keep the public device
+ * struct ABI available while stubbing the opaque handle types the code
+ * references.
+ */
+typedef struct idevice_private *idevice_t;
+typedef struct lockdownd_client_private *lockdownd_client_t;
+typedef struct libusb_device_handle libusb_device_handle;
+#else
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 #include <libusb.h>
+#endif
 
 #define DEVICE_FIELD_LEN 128
 #define DEVICE_UDID_LEN  64
