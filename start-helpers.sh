@@ -29,6 +29,88 @@ print_banner() {
 }
 
 # ------------------------------------------------------------------ #
+# WSL / environment preflight (T8)                                    #
+#                                                                      #
+# Runs before dependency install / build so WSL's biggest gotchas --  #
+# a Windows-mounted checkout and missing USB passthrough -- surface   #
+# immediately instead of after a multi-minute apt/build cycle.        #
+# WSL detection here is intentionally independent of detect_os()      #
+# (which runs after this) so the checks stay self-contained.          #
+# ------------------------------------------------------------------ #
+
+preflight_is_wsl() {
+    if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+        return 0
+    fi
+    if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+preflight_environment() {
+    if ! preflight_is_wsl; then
+        return 0
+    fi
+
+    msg_ok "Preflight: WSL detected (${WSL_DISTRO_NAME:-unknown distro})"
+
+    # Refuse to run from a Windows-mounted path (/mnt/c, /mnt/d, ...).
+    # USB passthrough and I/O both suffer badly across the 9p mount,
+    # and DFU-mode transfers are timing sensitive -- this is the single
+    # largest source of "it never works" reports from WSL users.
+    case "$SCRIPT_DIR" in
+        /mnt/[a-zA-Z]/*)
+            msg_err "This repo is checked out on a Windows-mounted path: $SCRIPT_DIR"
+            msg_info "WSL's /mnt/<drive> filesystem breaks USB passthrough performance and can"
+            msg_info "corrupt timing-sensitive DFU transfers. Clone into your Linux home instead:"
+            msg_info "  cd ~ && git clone <this-repo-url> tr4mpass && cd tr4mpass && ./start.sh"
+            exit 1
+            ;;
+    esac
+
+    # Best-effort Apple-device visibility + usbipd hint. Never fail
+    # hard here -- usbipd may simply not be installed yet, or the user
+    # has not connected the device.
+    if ! command -v lsusb >/dev/null 2>&1; then
+        msg_warn "Preflight: lsusb not found -- cannot check USB visibility yet."
+        return 0
+    fi
+
+    if lsusb 2>/dev/null | grep -qi "05ac"; then
+        msg_ok "Preflight: Apple USB device already visible via lsusb."
+        return 0
+    fi
+
+    msg_warn "Preflight: no Apple USB device visible yet."
+
+    # Best-effort only: `usbipd list` should return almost instantly on
+    # real usbipd-win, but some Linux boxes have an unrelated native
+    # `usbipd` binary (usbip-utils server) with a different CLI that can
+    # block waiting on a socket -- always bound by `timeout` so this
+    # preflight can never hang the whole script.
+    local busid="" usbipd_timeout="timeout 3"
+    command -v timeout >/dev/null 2>&1 || usbipd_timeout=""
+    if command -v usbipd.exe >/dev/null 2>&1; then
+        busid="$($usbipd_timeout usbipd.exe list 2>/dev/null | grep -i "apple" | awk '{print $1}' | head -n1 || true)"
+    elif command -v usbipd >/dev/null 2>&1; then
+        busid="$($usbipd_timeout usbipd list 2>/dev/null | grep -i "apple" | awk '{print $1}' | head -n1 || true)"
+    fi
+
+    echo ""
+    echo "  In Windows PowerShell (Admin), pass the device through with usbipd:"
+    if [ -n "$busid" ]; then
+        echo "    usbipd attach --wsl --busid $busid"
+    else
+        echo "    usbipd list                       # find your device's BUSID"
+        echo "    usbipd bind --busid <BUSID>"
+        echo "    usbipd attach --wsl --busid <BUSID>"
+    fi
+    echo "  Install usbipd if missing: winget install usbipd"
+    echo ""
+}
+
+# ------------------------------------------------------------------ #
 # OS detection                                                        #
 # ------------------------------------------------------------------ #
 
