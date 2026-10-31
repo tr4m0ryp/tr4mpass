@@ -8,6 +8,7 @@
 #include "test_framework.h"
 
 #include <stdint.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -16,16 +17,22 @@ static int test_parse_hex_field(const char *serial, const char *key,
 {
     const char *p;
     char *endptr;
+    const char *start;
 
     if (!serial || !key || !out)
         return -1;
     p = strstr(serial, key);
     if (!p)
         return -1;
+    start = p + strlen(key);
+    errno = 0;
     endptr = NULL;
-    *out = strtoull(p + strlen(key), &endptr, 16);
-    if (!endptr || endptr == p + strlen(key)) {
+    *out = strtoull(start, &endptr, 16);
+    if (errno != 0 || endptr == start ||
+        (*endptr != '\0' && *endptr != ' ' && *endptr != '\t' &&
+         *endptr != '\r' && *endptr != '\n')) {
         *out = 0;
+        return -1;
     }
     return 0;
 }
@@ -77,6 +84,18 @@ static void test_parse_cpid_partial(void)
     ASSERT_EQ(ecid, (uint64_t)0xBEEF);  /* unchanged */
 }
 
+static void test_parse_malformed_hex_field(void)
+{
+    uint64_t value = 0xBEEF;
+
+    ASSERT_EQ(test_parse_hex_field("CPID:xyz CPRV:11", "CPID:", &value), -1);
+    ASSERT_EQ(value, (uint64_t)0);
+
+    value = 0xBEEF;
+    ASSERT_EQ(test_parse_hex_field("CPID:8015junk CPRV:11", "CPID:", &value), -1);
+    ASSERT_EQ(value, (uint64_t)0);
+}
+
 void run_serial_parse_tests(void)
 {
     printf("--- Section 1: DFU serial parsing ---\n");
@@ -84,4 +103,5 @@ void run_serial_parse_tests(void)
     test_parse_cpid_a9_samsung();
     test_parse_cpid_empty_serial();
     test_parse_cpid_partial();
+    test_parse_malformed_hex_field();
 }

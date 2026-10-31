@@ -7,6 +7,9 @@
  * `g_tr4mpass_vars` below; adding a new TR4MPASS_* means adding a row.
  */
 
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include "util/env_config.h"
 #include "util/log.h"
 
@@ -38,10 +41,19 @@ int env_get_int(const char *name, int default_value)
     if (v == NULL || *v == '\0')
         return default_value;
 
+    while (*v != '\0' && isspace((unsigned char)*v))
+        v++;
+    if (*v == '\0')
+        return default_value;
+
     errno = 0;
     char *end = NULL;
     long parsed = strtol(v, &end, 10);
-    if (errno != 0 || end == v || (end && *end != '\0'))
+    if (errno != 0 || end == v)
+        return default_value;
+    while (*end != '\0' && isspace((unsigned char)*end))
+        end++;
+    if (*end != '\0')
         return default_value;
     if (parsed < INT_MIN || parsed > INT_MAX)
         return default_value;
@@ -51,7 +63,7 @@ int env_get_int(const char *name, int default_value)
 int env_require_all(const char *const *names, size_t count)
 {
     if (!names || count == 0)
-        return 0;
+        return -1;
 
     size_t missing_count = 0;
     for (size_t i = 0; i < count; ++i) {
@@ -127,11 +139,8 @@ static void print_secret(const char *value)
         printf("<empty>");
         return;
     }
-    char head[9] = {0};
-    size_t copy = n < 8 ? n : 8;
-    memcpy(head, value, copy);
-    printf("SET (%s%s, %zu chars)",
-           head, (n > 8 ? "..." : ""), n);
+    /* Never reveal any part of the secret content; length only. */
+    printf("SET (****, %zu chars)", n);
 }
 
 static void print_one(const env_entry_t *entry)

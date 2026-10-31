@@ -33,6 +33,7 @@ static void set_cert_field(plist_t record, lockdownd_client_t client,
 
     if (client && fn && fn(client, &blob) == 0 &&
         blob.data && blob.len > 0) {
+        log_debug("%s set_cert_field: %s = %zu bytes (live)", LOG_TAG, key, blob.len);
         plist_dict_set_item(record, key,
             plist_new_data((const char *)blob.data, (uint64_t)blob.len));
         cert_blob_free(&blob);
@@ -136,12 +137,14 @@ static int populate_common_fields(plist_t record,
 
     if (!record || !dev) return -1;
 
+    log_debug("%s populate_common_fields: building for UDID %s", LOG_TAG, dev->udid);
     token = build_account_token(dev);
     if (!token) {
         log_error("%s Failed to build AccountToken", LOG_TAG);
         return -1;
     }
     plist_dict_set_item(record, "AccountToken", token);
+    log_debug("%s populate_common_fields: AccountToken set", LOG_TAG);
 
     /* AccountTokenCertificate: X.509 cert endorsing the AccountToken. */
     set_cert_field(record, client, "AccountTokenCertificate",

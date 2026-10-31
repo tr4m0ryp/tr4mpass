@@ -5,6 +5,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
@@ -204,22 +205,89 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
     return 0;
 }
 
+int usb_dfu_reopen(libusb_device_handle **handle, uint8_t *iserial_out)
+{
+    int attempt;
+
+    if (!handle)
+        return -1;
+    *handle = NULL;
+    if (iserial_out)
+        *iserial_out = 0;
+
+    if (!g_ctx)
+        return -1;
+
+    for (attempt = 0; attempt < 8; attempt++) {
+        libusb_device **devs = NULL;
+        ssize_t count, i;
+
+        if (attempt > 0)
+            usleep(25000); /* 25 ms between retries */
+
+        count = libusb_get_device_list(g_ctx, &devs);
+        if (count < 0)
+            continue;
+
+        for (i = 0; i < count; i++) {
+            struct libusb_device_descriptor desc;
+            if (libusb_get_device_descriptor(devs[i], &desc) != LIBUSB_SUCCESS)
+                continue;
+            if (desc.idVendor == APPLE_VID && desc.idProduct == DFU_PID) {
+                if (libusb_open(devs[i], handle) != LIBUSB_SUCCESS) {
+                    *handle = NULL;
+                    continue;
+                }
+                if (iserial_out)
+                    *iserial_out = desc.iSerialNumber;
+                log_info("DFU device reopened (bus %d, addr %d, iSerial=%u, try %d)",
+                         libusb_get_bus_number(devs[i]),
+                         libusb_get_device_address(devs[i]),
+                         (unsigned)desc.iSerialNumber, attempt + 1);
+                libusb_free_device_list(devs, 1);
+                /*
+                 * Do NOT claim the interface.  libusb_claim_interface
+                 * sends SET_INTERFACE which resets the DFU state machine
+                 * and destroys heap-spray data.  All exploit traffic is
+                 * control transfers on EP0 — no claim needed.
+                 */
+                return 0;
+            }
+        }
+        libusb_free_device_list(devs, 1);
+    }
+    return -1;
+}
+
 /* Parse hex value after key prefix (e.g. "CPID:" -> 0x8015). */
 static int parse_hex_field(const char *serial, const char *key, uint64_t *out)
 {
     const char *p;
     char *endptr;
+    const char *start;
 
     if (!serial || !key || !out)
         return -1;
     p = strstr(serial, key);
     if (!p)
         return -1;
+
+    start = p + strlen(key);
+    errno = 0;
     endptr = NULL;
-    *out = strtoull(p + strlen(key), &endptr, 16);
-    if (!endptr || endptr == p + strlen(key)) {
+    *out = strtoull(start, &endptr, 16);
+
+    if (errno != 0 || endptr == start) {
         log_warn("parse_hex_field: garbage value for key '%s'", key);
         *out = 0;
+        return -1;
+    }
+
+    if (*endptr != '\0' && *endptr != ' ' && *endptr != '\t' &&
+        *endptr != '\r' && *endptr != '\n') {
+        log_warn("parse_hex_field: trailing junk after key '%s'", key);
+        *out = 0;
+        return -1;
     }
     return 0;
 }
@@ -493,6 +561,11 @@ int usb_dfu_send(libusb_device_handle *handle, const void *data, size_t len)
             log_error("DFU DNLOAD failed at offset %zu: %s",
                       sent, libusb_strerror(ret));
             usb_print_error(ret);
+            return -1;
+        }
+        if (ret == 0) {
+            /* Zero-byte transfer: sent would never advance and the loop would spin forever. */
+            log_error("DFU DNLOAD transferred 0 bytes at offset %zu", sent);
             return -1;
         }
 

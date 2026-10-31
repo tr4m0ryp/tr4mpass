@@ -1,5 +1,5 @@
 CC       = cc
-CFLAGS   = -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2
+CFLAGS   = -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2 -MMD -MP
 LDFLAGS  =
 
 # Library discovery via pkg-config (warn but do not fail if missing)
@@ -64,6 +64,8 @@ clean:
 	find src -name '*.o' -delete
 	rm -f $(TARGET) $(TEST_TARGET) $(MOCK_TARGET) .build-flags $(CHIP_DB_CANARY_BIN)
 	find tests -name '*.o' -delete 2>/dev/null || true
+	find src -name '*.d' -delete
+	find tests -name '*.d' -delete 2>/dev/null || true
 
 # ------------------------------------------------------------------ #
 # Chip DB integrity canary (T5, issue #53).                          #
@@ -79,9 +81,10 @@ clean:
 STRICT_CHIP_DB    ?= 1
 CHIP_DB_CANARY_BIN = tests/chip_db_canary.bin
 
-.chip-db-canary: tests/chip_db_canary.c include/device/chip_db_table.h \
-                 include/device/chip_db_table_rop.h include/device/chip_db.h
-	@$(CC) -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2 -Iinclude \
+# Phony by design: the canary never produces a file named .chip-db-canary,
+# so header prerequisites here would be dead. It re-runs on every build.
+.chip-db-canary:
+	@$(CC) $(CFLAGS) -Iinclude \
 	    -DSTRICT_CHIP_DB=$(STRICT_CHIP_DB) \
 	    tests/chip_db_canary.c -o $(CHIP_DB_CANARY_BIN)
 	@./$(CHIP_DB_CANARY_BIN)
@@ -149,12 +152,14 @@ MOCK_TARGET   = tests/run_mock_tests
 MOCK_PKG_LIBS = libplist-2.0 openssl
 # Headers-only pkg-config libs: symbols are mocked so we do NOT link them,
 # but SUT sources still #include their public headers, so we need the
-# include paths at compile time. libusb-1.0 lives under
-# <prefix>/include/libusb-1.0/ on every distro; without the -I flag the
-# `#include <libusb.h>` in include/device/device.h cannot be resolved.
+# include paths at compile time. The pkg-config --cflags output adds the
+# libusb-1.0/ subdirectory, so `#include <libusb.h>` (include/device/device.h)
+# resolves, but `#include <libusb-1.0/libusb.h>` needs the include root,
+# which the explicit -I below provides.
 MOCK_HEADER_LIBS = libusb-1.0 libimobiledevice-1.0 libirecovery-1.0 libssh2 libcurl
 MOCK_CFLAGS   = -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2 \
                 $(shell pkg-config --cflags $(MOCK_PKG_LIBS) $(MOCK_HEADER_LIBS) 2>/dev/null) \
+                -I$(shell pkg-config --variable=includedir libusb-1.0 2>/dev/null) \
                 -Iinclude -Itests -Itests/integration -Itests/mocks \
                 -DTEST_MODE -DUNIT_TEST
 ifeq ($(HAVE_PLIST_MEM_FREE),1)
@@ -173,3 +178,7 @@ test-mocks: $(MOCK_TARGET)
 
 $(MOCK_TARGET): $(MOCK_ALL_SRCS)
 	$(CC) $(MOCK_CFLAGS) -o $@ $^ $(MOCK_LDFLAGS)
+
+# Auto-generated header dependencies (from -MMD -MP in CFLAGS).
+# -include so a missing .d (fresh checkout, before first build) is not an error.
+-include $(SRCS:.c=.d)

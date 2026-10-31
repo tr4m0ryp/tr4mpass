@@ -91,6 +91,7 @@ static plist_t build_offline_handshake(device_info_t *dev,
 
     if (!dev || !session_info) return NULL;
 
+    log_debug("%s build_offline_handshake: constructing response", LOG_TAG);
     response = plist_new_dict();
     if (!response) return NULL;
 
@@ -108,9 +109,11 @@ static plist_t build_offline_handshake(device_info_t *dev,
 
     /* HandshakeResponseMessage: echo request back (accepted post-patch) */
     if (hrm_node) {
+        log_debug("%s build_offline_handshake: echoing HandshakeRequestMessage", LOG_TAG);
         plist_dict_set_item(response, "HandshakeResponseMessage",
                             plist_copy(hrm_node));
     } else {
+        log_debug("%s build_offline_handshake: no HRM, using empty placeholder", LOG_TAG);
         plist_dict_set_item(response, "HandshakeResponseMessage",
                             plist_new_data("", 0));
     }
@@ -151,6 +154,7 @@ int session_get_info(device_info_t *dev, plist_t *session_info)
      * session blob containing the CollectionBlob and
      * HandshakeRequestMessage needed for drmHandshake.
      */
+    log_debug("%s session_get_info: calling create_activation_session_info", LOG_TAG);
     err = mobileactivation_create_activation_session_info(ma, session_info);
     mobileactivation_client_free(ma);
 
@@ -237,6 +241,8 @@ int session_create_activation_info(device_info_t *dev,
 
     plist_dict_set_item(hs_copy, "BasebandWaitCount",
                         plist_new_uint(BASEBAND_WAIT_COUNT));
+    log_debug("%s session_create_activation_info: BasebandWaitCount=%d",
+              LOG_TAG, BASEBAND_WAIT_COUNT);
 
     err = mobileactivation_create_activation_info_with_session(
             ma, hs_copy, activation_info);
@@ -283,6 +289,7 @@ int session_activate(device_info_t *dev, plist_t activation_record,
      * This call finalizes activation by submitting the record along
      * with the handshake session context.
      */
+    log_debug("%s session_activate: calling activate_with_session", LOG_TAG);
     err = mobileactivation_activate_with_session(
             ma, activation_record, handshake_response);
     mobileactivation_client_free(ma);

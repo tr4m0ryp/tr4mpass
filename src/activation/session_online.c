@@ -25,7 +25,12 @@ static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *ud)
     struct resp_buf *b = ud;
     size_t add = size * nmemb;
     uint8_t *tmp = realloc(b->data, b->len + add + 1);
-    if (!tmp) return 0;
+    if (!tmp) {
+        free(b->data);
+        b->data = NULL;
+        b->len  = 0;
+        return 0;
+    }
     b->data = tmp;
     memcpy(b->data + b->len, ptr, add);
     b->len += add;
@@ -38,6 +43,7 @@ static int http_post(const char *url,
                      const char *content_type,
                      struct resp_buf *out)
 {
+    log_debug("[session_online] http_post: %s (%zu bytes)", url, body_len);
     CURL *curl = curl_easy_init();
     if (!curl) return -1;
 
@@ -58,10 +64,13 @@ static int http_post(const char *url,
     curl_easy_setopt(curl, CURLOPT_TIMEOUT,        HTTP_TIMEOUT_SECS);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
 
+    log_debug("[session_online] http_post: sending request...");
     CURLcode rc = curl_easy_perform(curl);
 
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    log_debug("[session_online] http_post: HTTP %ld, response %zu bytes",
+              http_code, out->len);
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
@@ -309,7 +318,7 @@ int session_probe_albert(device_info_t *dev, plist_t session_info)
 
                     if (ib_str) {
                         dump_ingest_body(ib_str, strlen(ib_str));
-                        free(ib_str);
+                        plist_mem_free(ib_str);
                     } else {
                         log_warn("[probe] IngestBody present but empty");
                     }
@@ -353,7 +362,7 @@ skip_ingest:
             plist_get_data_val(hrm, &hbuf, &hlen);
             printf("[probe] HandshakeRequestMessage: %llu bytes\n",
                    (unsigned long long)hlen);
-            free(hbuf);
+            plist_mem_free(hbuf);
         }
     }
 

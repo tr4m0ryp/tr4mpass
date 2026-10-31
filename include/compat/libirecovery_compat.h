@@ -19,9 +19,16 @@
 #ifdef TP_IRECV_HAS_NOTIFY_FINISH
     #define TP_IRECV_NEEDS_MANUAL_ZLP 0
 #else
-    #ifndef IRECV_SEND_OPT_DFU_NOTIFY_FINISH
-        #define IRECV_SEND_OPT_DFU_NOTIFY_FINISH 0
-    #endif
+    /*
+     * The Makefile probe compiles a reference to the enum member to decide
+     * whether it exists.  If we land here, the probe said "not present",
+     * so we provide a no-op fallback (value 0).
+     *
+     * The old #ifndef guard was removed: IRECV_SEND_OPT_DFU_NOTIFY_FINISH
+     * is an enum member, invisible to the preprocessor, so #ifndef could
+     * never detect it.
+     */
+    #define IRECV_SEND_OPT_DFU_NOTIFY_FINISH 0
     #define TP_IRECV_NEEDS_MANUAL_ZLP 1
 #endif
 

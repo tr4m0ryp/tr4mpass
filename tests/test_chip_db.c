@@ -11,7 +11,7 @@
 
 #include <string.h>
 
-static void test_chip_db_a9_tsmc(void)
+static void test_chip_db_a9_samsung(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8000);
     ASSERT_NOTNULL(c);
@@ -19,7 +19,7 @@ static void test_chip_db_a9_tsmc(void)
     ASSERT(strstr(c->name, "A9") != NULL);
 }
 
-static void test_chip_db_a9_samsung(void)
+static void test_chip_db_a9_tsmc(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8003);
     ASSERT_NOTNULL(c);

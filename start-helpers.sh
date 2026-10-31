@@ -291,8 +291,20 @@ build_project() {
 check_dfu() {
     case "$DETECTED_OS" in
         macos)
-            system_profiler SPUSBDataType 2>/dev/null | grep -q "0x1227"
-            return $?
+            # ioreg tree output contains the device name; "DFU Mode" appears
+            # in the node name when the device is in Apple DFU (no -l needed).
+            local ioreg_out
+            ioreg_out="$(ioreg -p IOUSB -w0 2>/dev/null || true)"
+            case "$ioreg_out" in
+                *"DFU Mode"*) return 0 ;;
+            esac
+            # Fallback: system_profiler (slower but covers edge cases).
+            local profiler_out
+            profiler_out="$(system_profiler SPUSBDataType 2>/dev/null || true)"
+            case "$profiler_out" in
+                *"0x1227"*) return 0 ;;
+            esac
+            return 1
             ;;
         linux|wsl)
             if command -v lsusb >/dev/null 2>&1; then
@@ -460,7 +472,7 @@ parse_device_info() {
         dfu_serial_fallback="$(
             lsusb -v -d 05ac:1227 2>/dev/null |
             sed -n 's/.*iSerial[[:space:]]\+[0-9]\+[[:space:]]\+//p' |
-            grep 'CPID:' | head -n1
+            grep 'CPID:' | head -n1 || true
         )"
         if [ -n "$dfu_serial_fallback" ]; then
             DEV_SERIAL="$dfu_serial_fallback"
@@ -496,15 +508,15 @@ parse_device_info() {
         return 0
     fi
 
-    DEV_MODEL="$(echo "$output" | grep "Product Type:" | sed 's/.*Product Type:[[:space:]]*//')"
-    DEV_CHIP_NAME="$(echo "$output" | grep "Chip Name:" | sed 's/.*Chip Name:[[:space:]]*//')"
-    DEV_CPID="$(echo "$output" | grep "CPID:" | sed 's/.*CPID:[[:space:]]*//')"
-    DEV_ECID="$(echo "$output" | grep "ECID:" | sed 's/.*ECID:[[:space:]]*//')"
-    DEV_IOS="$(echo "$output" | grep "iOS Version:" | sed 's/.*iOS Version:[[:space:]]*//')"
-    DEV_SERIAL="$(echo "$output" | grep "Serial:" | sed 's/.*Serial:[[:space:]]*//')"
-    DEV_IMEI="$(echo "$output" | grep "IMEI:" | sed 's/.*IMEI:[[:space:]]*//')"
-    DEV_CHECKM8="$(echo "$output" | grep "checkm8 vuln:" | sed 's/.*checkm8 vuln:[[:space:]]*//')"
-    DEV_DFU="$(echo "$output" | grep "DFU Mode:" | sed 's/.*DFU Mode:[[:space:]]*//')"
+    DEV_MODEL="$(echo "$output"    | sed -nE 's/^[[:space:]]*Product Type:[[:space:]]+//p'  | head -n1)"
+    DEV_CHIP_NAME="$(echo "$output" | sed -nE 's/^[[:space:]]*Chip Name:[[:space:]]+//p'    | head -n1)"
+    DEV_CPID="$(echo "$output"      | sed -nE 's/^[[:space:]]*CPID:[[:space:]]+//p'         | head -n1)"
+    DEV_ECID="$(echo "$output"      | sed -nE 's/^[[:space:]]*ECID:[[:space:]]+//p'         | head -n1)"
+    DEV_IOS="$(echo "$output"       | sed -nE 's/^[[:space:]]*iOS Version:[[:space:]]+//p'  | head -n1)"
+    DEV_SERIAL="$(echo "$output"    | sed -nE 's/^[[:space:]]*Serial:[[:space:]]+//p'       | head -n1)"
+    DEV_IMEI="$(echo "$output"      | sed -nE 's/^[[:space:]]*IMEI:[[:space:]]+//p'         | head -n1)"
+    DEV_CHECKM8="$(echo "$output"   | sed -nE 's/^[[:space:]]*checkm8 vuln:[[:space:]]+//p' | head -n1)"
+    DEV_DFU="$(echo "$output"       | sed -nE 's/^[[:space:]]*DFU Mode:[[:space:]]+//p'     | head -n1)"
 
     # Fallback: if libusb string descriptor reads time out, parse CPID/ECID
     # from lsusb's iSerial line so the exploit can proceed with --cpid/--ecid.
@@ -514,7 +526,7 @@ parse_device_info() {
         dfu_serial_fallback="$(
             lsusb -v -d 05ac:1227 2>/dev/null |
             sed -n 's/.*iSerial[[:space:]]\+[0-9]\+[[:space:]]\+//p' |
-            grep 'CPID:' | head -n1
+            grep 'CPID:' | head -n1 || true
         )"
         if [ -n "$dfu_serial_fallback" ]; then
             DEV_SERIAL="$dfu_serial_fallback"

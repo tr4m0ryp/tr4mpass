@@ -37,7 +37,7 @@ static int query_string_value(lockdownd_client_t lockdown,
         plist_get_string_val(val, &str);
         if (str) {
             snprintf(out, out_len, "%s", str);
-            free(str);
+            plist_mem_free(str);
         } else {
             out[0] = '\0';
         }
@@ -233,7 +233,9 @@ int device_query_info(device_info_t *dev)
 
     dev->is_cellular = (dev->imei[0] != '\0' || dev->meid[0] != '\0');
 
-    /* DFU mode and USB handle are set externally by usb_dfu module */
+    /* DFU mode and USB handle are set externally by usb_dfu module.
+     * Note: this clears dev->usb, so any handle must be re-attached
+     * after device_query_info() returns, not kept across it. */
     dev->is_dfu_mode = 0;
     dev->usb = NULL;
 

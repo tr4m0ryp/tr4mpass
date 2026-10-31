@@ -79,6 +79,7 @@ int afc_connect_service(device_info_t *dev, afc_client_t *client,
         return -1;
     }
 
+    log_debug("[afc] afc_connect_service: connected to '%s'", service_name);
     return 0;
 }
 
@@ -91,6 +92,7 @@ void afc_disconnect(afc_client_t client)
 {
     if (client) {
         afc_client_free(client);
+        log_debug("[afc] afc_disconnect: client freed");
     }
 }
 
@@ -106,6 +108,7 @@ int afc_write_file(afc_client_t client, const char *path,
         return -1;
     }
 
+    log_debug("[afc] afc_write_file: opening '%s' for write (%u bytes)", path, len);
     err = afc_file_open(client, path, AFC_FOPEN_WR, &handle);
     if (err != AFC_E_SUCCESS) {
         log_error("[afc] Cannot open '%s' for writing: %s",
@@ -121,6 +124,7 @@ int afc_write_file(afc_client_t client, const char *path,
         return -1;
     }
 
+    log_debug("[afc] afc_write_file: wrote %u/%u bytes to '%s'", written, len, path);
     return (int)written;
 }
 
@@ -136,6 +140,7 @@ int afc_read_file(afc_client_t client, const char *path,
         return -1;
     }
 
+    log_debug("[afc] afc_read_file: opening '%s' for read (max %u bytes)", path, max_len);
     err = afc_file_open(client, path, AFC_FOPEN_RDONLY, &handle);
     if (err != AFC_E_SUCCESS) {
         log_error("[afc] Cannot open '%s' for reading: %s",
@@ -157,6 +162,7 @@ int afc_read_file(afc_client_t client, const char *path,
     }
 
     afc_file_close(client, handle);
+    log_debug("[afc] afc_read_file: read %u bytes from '%s'", total_read, path);
     return (int)total_read;
 }
 
@@ -201,12 +207,16 @@ int afc_file_exists(afc_client_t client, const char *path)
     err = afc_get_file_info(client, path, &info);
     if (err == AFC_E_SUCCESS && info) {
         afc_dictionary_free(info);
+        log_debug("[afc] afc_file_exists: '%s' exists", path);
         return 1;
     }
 
-    if (err == AFC_E_OBJECT_NOT_FOUND)
+    if (err == AFC_E_OBJECT_NOT_FOUND) {
+        log_debug("[afc] afc_file_exists: '%s' not found", path);
         return 0;
+    }
 
+    log_debug("[afc] afc_file_exists: '%s' error: %s", path, afc_err_str(err));
     return -1;
 }
 
@@ -219,11 +229,13 @@ int afc_remove_file(afc_client_t client, const char *path)
         return -1;
     }
 
+    log_debug("[afc] afc_remove_file: removing '%s'", path);
     err = afc_remove_path(client, path);
     if (err != AFC_E_SUCCESS) {
         log_error("[afc] Cannot remove '%s': %s", path, afc_err_str(err));
         return -1;
     }
 
+    log_debug("[afc] afc_remove_file: removed '%s'", path);
     return 0;
 }

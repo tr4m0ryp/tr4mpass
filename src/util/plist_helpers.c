@@ -15,7 +15,13 @@ char *plist_dict_get_string(plist_t dict, const char *key)
         return NULL;
 
     plist_get_string_val(node, &val);
-    return val; /* libplist malloc's this; caller frees */
+    if (!val)
+        return NULL;
+
+    /* libplist owns val; hand the caller an independent copy. */
+    char *copy = strdup(val);
+    plist_mem_free(val);
+    return copy;
 }
 
 int plist_dict_get_bool_val(plist_t dict, const char *key, int *out)

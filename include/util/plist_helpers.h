@@ -6,7 +6,8 @@
 
 /*
  * Retrieve a string value from a plist dict by key.
- * Returns a malloc'd copy the caller must free, or NULL on error.
+ * Returns a malloc'd copy (strdup) the caller must release with free(),
+ * or NULL on error.  Not owned by libplist.
  */
 char *plist_dict_get_string(plist_t dict, const char *key);
 
@@ -27,7 +28,8 @@ int plist_dict_get_uint_val(plist_t dict, const char *key, uint64_t *out);
 /*
  * Serialize a plist to an XML string.
  * *len is set to the byte length (excluding NUL).
- * Returns a plist-allocated string; caller must free with plist_mem_free().
+ * Returns a plist-allocated string; caller must free with plist_mem_free()
+ * (not free()).
  */
 char *plist_to_xml_string(plist_t plist, uint32_t *len);
 
