@@ -9,8 +9,6 @@ Free, open-source tool that removes iCloud activation lock from iPhones and iPad
 
 **Supports iOS 12 through 26.1 | iPhone 5s through iPhone 15 Pro**
 
-***For developers and security researchers: read [`26.3-vulnerability.md`](26.3-vulnerability.md) for potential vulnerabilities that could enable bypass on iOS 26.3 and later.***
-
 ---
 
 ## How to Use
@@ -243,13 +241,25 @@ The codebase is written in C99 (21 source files, 20 headers). Every file is unde
 
 ---
 
-## iOS 26.3+ (Research in Progress)
+## How This Differs From a Jailbreak Tool
 
-Current bypass methods work up to iOS 26.1. For iOS 26.2 and later, Apple hardened several security layers that break existing approaches.
+checkm8 is shared with tools like [palera1n](https://github.com/palera1n/palera1n),
+but the objective is not. This toolkit exists to **activate** a device stuck on
+the Setup Assistant screen; a jailbreak tool exists to run unsigned code
+permanently.
 
-We have identified a potential bypass vector through **VU#346053** -- an unpatched vulnerability in Apple's activation server that accepts unsigned XML payloads. This could enable bypass via a captive portal during device setup, without needing any exploit or jailbreak.
+The two consume the same first steps (exploit, temporary execution environment)
+and then diverge completely. Full route comparison, Mermaid diagrams and a
+capability-by-capability table:
+[`palera1n-comparison.md`](docs/palera1n-comparison.md).
 
-**This is not implemented yet.** See [`26.3-vulnerability.md`](26.3-vulnerability.md) for the full technical analysis, proposed attack chain, and implementation roadmap.
+To take this toolkit's remaining steps from "written" to "executed" —
+ramdisk, kernel patches, activation record, deletescript — see the
+operations guide [`pipeline.md`](docs/pipeline.md) (scripts,
+workflow, tooling decisions) and the phased plan with decision gates:
+[`execution-plan.md`](docs/execution-plan.md).
+
+All documentation lives under [`docs/`](docs/README.md): the operations guide, the execution plan, the palera1n comparison, and the Apple Silicon USB-C research notes.
 
 ---
 
@@ -289,6 +299,17 @@ This project was built on extensive research and analysis of open-source tools, 
 | [iBoot64Patcher](https://github.com/Tihmstar/iBoot64Patcher) | Bootloader patching for ramdisk loading |
 | [ramdiskutil](https://github.com/cfw-project/ramdiskutil) | iOS restore ramdisk customization |
 | [iExtractor](https://github.com/malus-security/iextractor) | Automated IPSW firmware extraction |
+
+### Exploit & Bootloader Chain (vendored in this repo)
+
+| Project | What we used it for | License |
+|---------|-------------------|---------|
+| [checkm8](https://github.com/axi0m/core/blob/master/exploit/README.md) (axi0m) | The DFU vulnerability our exploit stages are based on — gaster's payload design, reset-between-every-stage discipline (`src/exploit/checkm8.c`) | MIT |
+| [checkra1n / pongoOS](https://github.com/checkra1n/checkra1n) (checkra1n team) | Bootloader exploit + pongoOS shell we dump and use as the loader (serial `pongoOS / checkra1n 2.5.1`); KPF kernel patcher is the checkra1n KPF | MIT |
+| [ra1npoc](https://github.com/kok3shidoll/ra1npoc) (kok3shidoll, commit `3ee6d55`, vendored 2026-11-01) | Open-source checkra1n-clone pongoOS loader — **the current canonical pwn path** (`tools/ra1npoc/`); see its own `README-tr4mpass.md` | MIT |
+| [SSHRD_Script](https://github.com/verygenericname/SSHRD_Script) (verygenericname, submodule `6c05c8a7`, vendored 2026-11-01) | Dropbear + bash + shell tooling (`tools/sshtars/ssh.tar.gz`, BSD-3-Clause) packed into the ramdisk by `scripts/build_ssh_rd.sh` | BSD-3-Clause |
+| [palera1n](https://github.com/palera1n/palera1n) | Reference for the freeboot + KPF-patched boot model we adapt for the bypass | MIT |
+| [conofor / iOS-Hacktivation-Toolkit](https://github.com/conofor/iOS-Hacktivation-Toolkit) (conofor) | `mobileactivationd` patching methodology — the bypass approach this project's activation work is based on (see journal E34–E50); no public iOS 14.x build exists, so a real port is still needed | MIT |
 
 ### Security Research and Disclosures
 
