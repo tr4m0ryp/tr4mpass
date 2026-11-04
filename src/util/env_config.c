@@ -111,6 +111,7 @@ static const env_entry_t g_tr4mpass_vars[] = {
     { TR4MPASS_ENV_SSH_PASSWORD,    ENV_KIND_SECRET },
     { TR4MPASS_ENV_SIGNING_KEY,     ENV_KIND_SECRET },
     { TR4MPASS_ENV_RAMDISK_TIMEOUT, ENV_KIND_PLAIN  },
+    { TR4MPASS_ENV_STOP_AFTER,      ENV_KIND_PLAIN  },
 };
 
 static size_t g_tr4mpass_vars_count =

@@ -31,6 +31,7 @@
 #define TR4MPASS_ENV_SSH_PASSWORD      "TR4MPASS_SSH_PASSWORD"
 #define TR4MPASS_ENV_SIGNING_KEY       "TR4MPASS_SIGNING_KEY"
 #define TR4MPASS_ENV_RAMDISK_TIMEOUT   "TR4MPASS_RAMDISK_TIMEOUT"
+#define TR4MPASS_ENV_STOP_AFTER        "TR4MPASS_STOP_AFTER"
 
 /*
  * Return the value of `name` from the environment.  When the variable

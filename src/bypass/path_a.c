@@ -15,8 +15,44 @@
 #include "activation/activation.h"
 #include "activation/record.h"
 #include "util/log.h"
+#include "util/env_config.h"
 
 #include "bypass/path_a_internal.h"
+
+/* ------------------------------------------------------------------ */
+/* Staged execution (TR4MPASS_STOP_AFTER)                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Staged-run cutoff, read leniently so a typo'd value can never abort
+ * a run that would otherwise succeed.  env_config.c carries no
+ * range/suffix logic, so a tiny parser lives here like path_a_ramdisk.c.
+ */
+static int
+path_a_stop_after(void)
+{
+    const char *val = getenv(TR4MPASS_ENV_STOP_AFTER);
+    long v;
+    char *end;
+
+    if (!val || val[0] == '\0') {
+        log_debug("path_a: %s not set, running all 8 steps",
+                  TR4MPASS_ENV_STOP_AFTER);
+        return 8;
+    }
+    v = strtol(val, &end, 10);
+    if (end == val || *end != '\0') {
+        log_debug("path_a: %s='%s' not numeric, running all 8 steps",
+                  TR4MPASS_ENV_STOP_AFTER, val);
+        return 8;
+    }
+    if (v < 1 || v > 8) {
+        log_warn("path_a: %s=%ld out of range (1-8), running all 8 steps",
+                 TR4MPASS_ENV_STOP_AFTER, v);
+        return 8;
+    }
+    return (int)v;
+}
 
 /* ------------------------------------------------------------------ */
 /* Module probe/execute                                                */
@@ -105,11 +141,14 @@ static int
 path_a_execute(device_info_t *dev)
 {
     int ret;
+    int stop_after;
 
     if (!dev) {
         log_error("path_a: execute called with NULL device");
         return -1;
     }
+
+    stop_after = path_a_stop_after();
 
     log_info("path_a: === Starting A5-A11 bypass for %s ===",
              dev->product_type);
@@ -122,6 +161,11 @@ path_a_execute(device_info_t *dev)
         return -1;
     }
 
+    if (stop_after == 1) {
+        log_info("path_a: staged run: stopping after step 1 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
+    }
+
     /* Step 2: Verify PWND state */
     log_info("path_a: [2/8] Verifying pwned DFU state");
     ret = checkm8_verify_pwned(dev);
@@ -131,12 +175,22 @@ path_a_execute(device_info_t *dev)
     }
     log_info("path_a: PWND verified in serial descriptor");
 
+    if (stop_after == 2) {
+        log_info("path_a: staged run: stopping after step 2 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
+    }
+
     /* Step 3: Load ramdisk */
     log_info("path_a: [3/8] Loading ramdisk");
     ret = path_a_load_ramdisk(dev);
     if (ret != 0) {
         log_error("path_a: ramdisk loading failed");
         return -1;
+    }
+
+    if (stop_after == 3) {
+        log_info("path_a: staged run: stopping after step 3 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
     }
 
     /* Step 4: Apply jailbreak patches */
@@ -147,12 +201,22 @@ path_a_execute(device_info_t *dev)
         return -1;
     }
 
+    if (stop_after == 4) {
+        log_info("path_a: staged run: stopping after step 4 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
+    }
+
     /* Step 5: Replace mobileactivationd */
     log_info("path_a: [5/8] Replacing mobileactivationd");
     ret = path_a_replace_mobileactivationd(dev);
     if (ret != 0) {
         log_error("path_a: mobileactivationd replacement failed");
         return -1;
+    }
+
+    if (stop_after == 5) {
+        log_info("path_a: staged run: stopping after step 5 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
     }
 
     /* Step 6: Build and submit activation record */
@@ -163,12 +227,22 @@ path_a_execute(device_info_t *dev)
         return -1;
     }
 
+    if (stop_after == 6) {
+        log_info("path_a: staged run: stopping after step 6 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
+    }
+
     /* Step 7: Run deletescript cleanup */
     log_info("path_a: [7/8] Running deletescript cleanup");
     ret = deletescript_run(dev);
     if (ret != 0) {
         log_error("path_a: deletescript cleanup failed");
         return -1;
+    }
+
+    if (stop_after == 7) {
+        log_info("path_a: staged run: stopping after step 7 as requested (TR4MPASS_STOP_AFTER)");
+        return 0;
     }
 
     /* Step 8: Verify activation state */
