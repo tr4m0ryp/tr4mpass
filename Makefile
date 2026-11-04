@@ -6,7 +6,7 @@ LDFLAGS  =
 PKG_LIBS = libimobiledevice-1.0 libirecovery-1.0 libusb-1.0 \
            libplist-2.0 openssl libcurl libssh2
 
-CFLAGS  += $(shell pkg-config --cflags $(PKG_LIBS) 2>/dev/null)
+CFLAGS  += $(shell pkg-config --cflags $(PKG_LIBS) 2>/dev/null) -I$(shell pkg-config --variable=includedir libusb-1.0 2>/dev/null)
 LDFLAGS += $(shell pkg-config --libs   $(PKG_LIBS) 2>/dev/null)
 
 $(foreach lib,$(PKG_LIBS),$(if $(shell pkg-config --exists $(lib) 2>/dev/null && echo ok),,$(warning Library $(lib) not found by pkg-config)))
@@ -155,6 +155,7 @@ MOCK_PKG_LIBS = libplist-2.0 openssl
 MOCK_HEADER_LIBS = libusb-1.0 libimobiledevice-1.0 libirecovery-1.0 libssh2 libcurl
 MOCK_CFLAGS   = -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2 \
                 $(shell pkg-config --cflags $(MOCK_PKG_LIBS) $(MOCK_HEADER_LIBS) 2>/dev/null) \
+                -I$(shell pkg-config --variable=includedir libusb-1.0 2>/dev/null) \
                 -Iinclude -Itests -Itests/integration -Itests/mocks \
                 -DTEST_MODE -DUNIT_TEST
 ifeq ($(HAVE_PLIST_MEM_FREE),1)
