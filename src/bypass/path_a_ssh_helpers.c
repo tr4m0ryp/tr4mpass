@@ -100,6 +100,7 @@ ssh_open(ssh_sess_t **sess_out, const char *host, int port,
     }
     *sess_out = NULL;
 
+    log_debug("path_a_ssh: ssh_open: initializing libssh2");
     if (ssh_global_init() != 0)
         return -1;
 
@@ -110,9 +111,11 @@ ssh_open(ssh_sess_t **sess_out, const char *host, int port,
     }
     s->sock = -1;
 
+    log_debug("path_a_ssh: ssh_open: TCP connect to %s:%d", host, port);
     s->sock = ssh_tcp_connect(host, port);
     if (s->sock < 0)
         goto fail;
+    log_debug("path_a_ssh: ssh_open: TCP connected (fd=%d)", s->sock);
 
     s->session = libssh2_session_init();
     if (!s->session) {
@@ -122,16 +125,26 @@ ssh_open(ssh_sess_t **sess_out, const char *host, int port,
 
     libssh2_session_set_blocking(s->session, 1);
 
+    log_debug("path_a_ssh: ssh_open: starting SSH handshake");
     if (libssh2_session_handshake(s->session, s->sock) != 0) {
         log_error("path_a_ssh: handshake failed on %s:%d", host, port);
         goto fail;
     }
+    log_debug("path_a_ssh: ssh_open: handshake complete");
 
+    /* Host-key verification intentionally skipped: the target is always
+     * the local device over USB (localhost / usbmuxd), not a remote
+     * server.  A MITM between the host and its own USB bus is outside
+     * the threat model. */
+
+    log_debug("path_a_ssh: ssh_open: authenticating user '%s'", user);
     if (libssh2_userauth_password(s->session, user, password) != 0) {
         log_error("path_a_ssh: password auth failed for user '%s'", user);
         goto fail;
     }
 
+    log_info("path_a_ssh: ssh_open: session established to %s:%d as '%s'",
+             host, port, user);
     *sess_out = s;
     return 0;
 
@@ -167,8 +180,10 @@ ssh_drain(LIBSSH2_CHANNEL *ch, char *stdout_buf, size_t stdout_cap)
         stdout_buf[total] = '\0';
     } else {
         char drain[256];
-        while (libssh2_channel_read(ch, drain, sizeof(drain)) > 0)
+        ssize_t rc;
+        while ((rc = libssh2_channel_read(ch, drain, sizeof(drain))) > 0)
             ;
+        if (rc < 0) return -1;
     }
     return 0;
 }
@@ -178,12 +193,14 @@ ssh_exec(ssh_sess_t *sess, const char *cmd, int *exit_code_out,
          char *stdout_buf, size_t stdout_cap)
 {
     LIBSSH2_CHANNEL *ch;
+    int exit_status;
 
     if (!sess || !sess->session || !cmd) {
         log_error("path_a_ssh: ssh_exec: invalid arguments");
         return -1;
     }
 
+    log_debug("path_a_ssh: ssh_exec: opening channel for '%s'", cmd);
     ch = libssh2_channel_open_session(sess->session);
     if (!ch) {
         log_error("path_a_ssh: channel_open_session failed");
@@ -195,6 +212,7 @@ ssh_exec(ssh_sess_t *sess, const char *cmd, int *exit_code_out,
         return -1;
     }
 
+    log_debug("path_a_ssh: ssh_exec: draining output");
     if (ssh_drain(ch, stdout_buf, stdout_cap) != 0) {
         log_error("path_a_ssh: channel_read failed");
         libssh2_channel_close(ch);
@@ -203,8 +221,10 @@ ssh_exec(ssh_sess_t *sess, const char *cmd, int *exit_code_out,
     }
 
     libssh2_channel_close(ch);
+    exit_status = libssh2_channel_get_exit_status(ch);
     if (exit_code_out)
-        *exit_code_out = libssh2_channel_get_exit_status(ch);
+        *exit_code_out = exit_status;
+    log_debug("path_a_ssh: ssh_exec: '%s' exit=%d", cmd, exit_status);
     libssh2_channel_free(ch);
     return 0;
 }
@@ -254,6 +274,8 @@ ssh_scp_upload(ssh_sess_t *sess, const char *local_path,
         log_error("path_a_ssh: cannot stat regular file '%s'", local_path);
         return -1;
     }
+    log_debug("path_a_ssh: scp_upload: '%s' -> '%s' (%lld bytes, mode=%03o)",
+              local_path, remote_path, (long long)st.st_size, (unsigned)(mode & 0777));
     fd = open(local_path, O_RDONLY);
     if (fd < 0) {
         log_error("path_a_ssh: open('%s') failed: %s",
@@ -276,6 +298,10 @@ ssh_scp_upload(ssh_sess_t *sess, const char *local_path,
     libssh2_channel_wait_closed(ch);
     libssh2_channel_free(ch);
     close(fd);
+    if (ok == 0)
+        log_debug("path_a_ssh: scp_upload: '%s' transferred successfully", remote_path);
+    else
+        log_error("path_a_ssh: scp_upload: stream transfer failed for '%s'", remote_path);
     return ok;
 }
 
@@ -284,6 +310,7 @@ ssh_close(ssh_sess_t *sess)
 {
     if (!sess)
         return;
+    log_debug("path_a_ssh: ssh_close: disconnecting session");
     if (sess->session) {
         libssh2_session_disconnect(sess->session, "goodbye");
         libssh2_session_free(sess->session);
@@ -292,4 +319,5 @@ ssh_close(ssh_sess_t *sess)
         close(sess->sock);
     free(sess);
     ssh_global_exit();
+    log_debug("path_a_ssh: ssh_close: done");
 }

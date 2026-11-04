@@ -151,6 +151,8 @@ int signer_ecdsa_sign(const char *pem_path,
     *sig     = NULL;
     *sig_len = 0;
 
+    log_debug("%s signer_ecdsa_sign: loading key from %s, data=%zu bytes",
+              LOG_TAG, pem_path, len);
     pkey = load_private_key(pem_path);
     if (!pkey) return -1;
 
@@ -190,6 +192,7 @@ int signer_ecdsa_sign(const char *pem_path,
     *sig_len = out_len;
     out      = NULL;
     rc       = 0;
+    log_debug("%s signer_ecdsa_sign: signature %zu bytes (DER)", LOG_TAG, out_len);
 
 out:
     if (ctx) EVP_MD_CTX_free(ctx);
@@ -211,6 +214,8 @@ int signer_ecdsa_verify(const char *pem_path,
     if (!pem_path || !sig || sig_len == 0) return -1;
     if (len > 0 && !data) return -1;
 
+    log_debug("%s signer_ecdsa_verify: key=%s, data=%zu bytes, sig=%zu bytes",
+              LOG_TAG, pem_path, len, sig_len);
     pkey = load_public_key(pem_path);
     if (!pkey) return -1;
 

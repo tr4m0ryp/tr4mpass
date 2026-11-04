@@ -112,24 +112,25 @@ static int blob_from_plist_node(plist_t node, cert_blob_t *out)
     out->len  = 0;
 
     t = plist_get_node_type(node);
+    log_debug("%s blob_from_plist_node: node type=%d", LOG_TAG, (int)t);
 
     if (t == PLIST_DATA) {
         char    *buf = NULL;
         uint64_t len = 0;
         plist_get_data_val(node, &buf, &len);
         if (!buf || len == 0) {
-            free(buf);
+            plist_mem_free(buf);
             log_error("%s PLIST_DATA node is empty", LOG_TAG);
             return -1;
         }
         out->data = malloc((size_t)len);
         if (!out->data) {
-            free(buf);
+            plist_mem_free(buf);
             return -1;
         }
         memcpy(out->data, buf, (size_t)len);
         out->len = (size_t)len;
-        free(buf);
+        plist_mem_free(buf);
         return 0;
     }
 
@@ -144,7 +145,7 @@ static int blob_from_plist_node(plist_t node, cert_blob_t *out)
         }
         sl = strlen(s);
         out->data = b64_decode(s, sl, &dl);
-        free(s);
+        plist_mem_free(s);
         if (!out->data || dl == 0) {
             free(out->data);
             out->data = NULL;
@@ -188,6 +189,8 @@ static int lookup_blob(lockdownd_client_t client,
     out->data = NULL;
     out->len  = 0;
 
+    log_debug("%s lookup_blob: domain=%s key=%s", LOG_TAG,
+              domain ? domain : "(null)", key);
     e = lockdownd_get_value(client, domain, key, &node);
     if (e != LOCKDOWN_E_SUCCESS || !node) {
         if (node) plist_free(node);

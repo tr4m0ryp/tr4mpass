@@ -35,14 +35,20 @@ const bypass_module_t *bypass_select(device_info_t *dev)
 {
     if (!dev) return NULL;
 
+    log_debug("[bypass] Probing %d module(s) for device CPID=0x%04X",
+              g_module_count, dev->cpid);
     for (int i = 0; i < g_module_count; i++) {
-        int result = g_modules[i].probe(dev);
+        int result;
+        log_debug("[bypass] Probing module '%s'...", g_modules[i].name);
+        result = g_modules[i].probe(dev);
         if (result == 1) {
             log_info("[bypass] Selected module: %s", g_modules[i].name);
             return &g_modules[i];
         }
         if (result < 0) {
             log_warn("[bypass] probe() failed for '%s'", g_modules[i].name);
+        } else {
+            log_debug("[bypass] Module '%s' not compatible", g_modules[i].name);
         }
     }
 

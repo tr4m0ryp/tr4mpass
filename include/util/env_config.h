@@ -55,7 +55,7 @@ int env_require_all(const char *const *names, size_t count);
 
 /*
  * Dump the current value of every TR4MPASS_* variable to stdout.
- * Secrets (password, signing key) are abbreviated; paths are printed
+ * Secrets (password, signing key) are masked, never printed; paths are printed
  * verbatim; unset variables print "<unset>".
  */
 void env_print_tr4mpass_summary(void);

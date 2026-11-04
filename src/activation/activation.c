@@ -60,6 +60,7 @@ int activation_get_state(device_info_t *dev, char *buf, size_t buf_len)
 
     buf[0] = '\0';
 
+    log_debug("%s activation_get_state: querying device", LOG_TAG);
     if (ma_client_start(dev, &ma) < 0)
         return -1;
 
@@ -77,7 +78,8 @@ int activation_get_state(device_info_t *dev, char *buf, size_t buf_len)
         plist_get_string_val(state, &str);
         if (str) {
             snprintf(buf, buf_len, "%s", str);
-            free(str);
+            log_debug("%s activation_get_state: state = \"%s\"", LOG_TAG, str);
+            plist_mem_free(str);
         }
     } else {
         /* Fallback: convert the whole plist to XML for inspection */
@@ -112,6 +114,7 @@ int activation_get_session_info(device_info_t *dev,
     *blob_xml = NULL;
     *blob_len = 0;
 
+    log_debug("%s activation_get_session_info: requesting session blob", LOG_TAG);
     if (ma_client_start(dev, &ma) < 0)
         return -1;
 
@@ -151,6 +154,7 @@ int activation_get_info(device_info_t *dev,
     *info_xml = NULL;
     *info_len = 0;
 
+    log_debug("%s activation_get_info: requesting activation info", LOG_TAG);
     if (ma_client_start(dev, &ma) < 0)
         return -1;
 
@@ -189,6 +193,7 @@ int activation_submit_record(device_info_t *dev,
         return -1;
     }
 
+    log_debug("%s activation_submit_record: parsing %u bytes of XML", LOG_TAG, record_len);
     if (ma_client_start(dev, &ma) < 0)
         return -1;
 
@@ -199,6 +204,7 @@ int activation_submit_record(device_info_t *dev,
         return -1;
     }
 
+    log_debug("%s activation_submit_record: calling mobileactivation_activate", LOG_TAG);
     err = mobileactivation_activate(ma, record);
     plist_free(record);
     mobileactivation_client_free(ma);
@@ -224,6 +230,8 @@ int activation_submit_record_with_session(device_info_t *dev,
         return -1;
     }
 
+    log_debug("%s activation_submit_record_with_session: %u bytes, with headers",
+              LOG_TAG, record_len);
     if (ma_client_start(dev, &ma) < 0)
         return -1;
 
@@ -234,6 +242,7 @@ int activation_submit_record_with_session(device_info_t *dev,
         return -1;
     }
 
+    log_debug("%s calling mobileactivation_activate_with_session", LOG_TAG);
     err = mobileactivation_activate_with_session(ma, record, session_headers);
     plist_free(record);
     mobileactivation_client_free(ma);
@@ -287,8 +296,11 @@ int activation_is_activated(device_info_t *dev)
     if (activation_get_state(dev, state, sizeof(state)) < 0)
         return -1;
 
-    if (strcmp(state, "Activated") == 0)
+    if (strcmp(state, "Activated") == 0) {
+        log_debug("%s activation_is_activated: YES", LOG_TAG);
         return 1;
+    }
 
+    log_debug("%s activation_is_activated: NO (state=\"%s\")", LOG_TAG, state);
     return 0;
 }

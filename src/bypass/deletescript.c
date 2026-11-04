@@ -68,11 +68,14 @@ static int purge_directory(afc_client_t afc, const char *dir_path)
         if (strcmp(entries[i], ".") == 0 || strcmp(entries[i], "..") == 0)
             continue;
         snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entries[i]);
+        log_debug("%s purge_directory: removing '%s'", LOG_TAG, full_path);
         if (afc_remove_file(afc, full_path) == 0)
             removed++;
         else
             log_warn("%s Could not remove: %s", LOG_TAG, full_path);
     }
+    log_debug("%s purge_directory: removed %d entries from '%s'",
+              LOG_TAG, removed, dir_path);
 
     afc_dictionary_free(entries);
     return removed;
@@ -198,9 +201,13 @@ int deletescript_run(device_info_t *dev)
              dev->product_type);
 
     /* Steps are safe for all iOS versions; order matters. */
+    log_debug("%s [1/4] Removing Setup.app...", LOG_TAG);
     if (deletescript_remove_setup_app(dev) < 0)          errors++;
+    log_debug("%s [2/4] Setting PurpleBuddy done...", LOG_TAG);
     if (deletescript_set_purplebuddy_done(dev) < 0)      errors++;
+    log_debug("%s [3/4] Purging activation records...", LOG_TAG);
     if (deletescript_purge_activation_records(dev) < 0)  errors++;
+    log_debug("%s [4/4] Clearing caches...", LOG_TAG);
     if (deletescript_clear_caches(dev) < 0)              errors++;
 
     if (errors > 0) {

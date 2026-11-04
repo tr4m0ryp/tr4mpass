@@ -67,11 +67,16 @@ env_int(const char *name, int fallback)
     long v;
     char *end;
 
-    if (!val || val[0] == '\0')
+    if (!val || val[0] == '\0') {
+        log_debug("path_a_ramdisk: %s not set, using default %d", name, fallback);
         return fallback;
+    }
     v = strtol(val, &end, 10);
-    if (end == val || v <= 0 || v > 0x7FFFFFFF)
+    if (end == val || v <= 0 || v > 0x7FFFFFFF) {
+        log_warn("path_a_ramdisk: %s='%s' invalid, using default %d", name, val, fallback);
         return fallback;
+    }
+    log_debug("path_a_ramdisk: %s=%ld", name, v);
     return (int)v;
 }
 
@@ -112,12 +117,15 @@ reconnect_device(irecv_client_t *client, uint64_t ecid,
     start = time(NULL);
     for (;;) {
         err = irecv_open_with_ecid(client, ecid);
-        if (err == IRECV_E_SUCCESS && *client)
+        if (err == IRECV_E_SUCCESS && *client) {
+            log_debug("path_a_ramdisk: reconnect succeeded (%s)", stage_label);
             return 0;
+        }
 
-        /* iBEC may briefly disappear; common cases here are
-         * IRECV_E_NO_DEVICE / IRECV_E_UNABLE_TO_CONNECT / ENODEV. */
         now = time(NULL);
+        log_debug("path_a_ramdisk: reconnect poll (%s): %lds elapsed, err=%s",
+                  stage_label ? stage_label : "reconnect",
+                  (long)(now - start), irecv_strerror(err));
         if ((long)(now - start) >= (long)timeout_sec) {
             log_error("path_a_ramdisk: reconnect timeout (%s) after %ds:"
                       " %s", stage_label ? stage_label : "reconnect",
@@ -195,6 +203,7 @@ path_a_load_ramdisk(device_info_t *dev)
         return -1;
     }
 
+    log_info("path_a_ramdisk: starting ramdisk load sequence");
     ibss    = env_required("TR4MPASS_IBSS_PATH");
     ibec    = env_required("TR4MPASS_IBEC_PATH");
     devtree = env_required("TR4MPASS_DEVICETREE_PATH");
@@ -216,6 +225,9 @@ path_a_load_ramdisk(device_info_t *dev)
     if (trustcache && file_readable(trustcache, "trustcache") != 0)
         return -1;
 
+    log_debug("path_a_ramdisk: ssh_port=%d, timeout=%ds, trustcache=%s",
+              ssh_port, rd_timeout, trustcache ? trustcache : "(none)");
+
     ecid = dev->ecid;
 
     /* Stage 1: pwned DFU -> iBSS upload */
@@ -228,10 +240,12 @@ path_a_load_ramdisk(device_info_t *dev)
         return -1;
     }
 
+    log_info("path_a_ramdisk: [stage 1/5] uploading iBSS to pwned DFU");
     if (send_staged_image(client, ibss, "iBSS") != 0)
         goto cleanup;
 
     /* Stage 2: reconnect in recovery mode for iBEC upload */
+    log_info("path_a_ramdisk: [stage 2/5] reconnecting for iBEC upload");
     if (reconnect_device(&client, ecid, rd_timeout, "after iBSS") != 0)
         goto cleanup;
 
@@ -242,10 +256,12 @@ path_a_load_ramdisk(device_info_t *dev)
         goto cleanup;
 
     /* Stage 3: reconnect in iBEC context */
+    log_info("path_a_ramdisk: [stage 3/5] reconnecting in iBEC context");
     if (reconnect_device(&client, ecid, rd_timeout, "after iBEC go") != 0)
         goto cleanup;
 
     /* Stage 4: devicetree / trustcache / ramdisk uploads */
+    log_info("path_a_ramdisk: [stage 4/5] uploading boot images");
     if (send_staged_image(client, devtree, "devicetree") != 0)
         goto cleanup;
 
@@ -260,6 +276,7 @@ path_a_load_ramdisk(device_info_t *dev)
         goto cleanup;
 
     /* Stage 5: boot and wait for SSH */
+    log_info("path_a_ramdisk: [stage 5/5] booting ramdisk and waiting for SSH");
     if (send_command(client, "bootx") != 0)
         goto cleanup;
 

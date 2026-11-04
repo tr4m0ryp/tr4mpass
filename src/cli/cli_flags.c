@@ -121,7 +121,7 @@ int cli_parse_bypass_flags(int argc, char *argv[])
             value = eq + 1;
         } else if (i + 1 < argc) {
             const char *next = argv[i + 1];
-            if (!next) {
+            if (!next || next[0] == '-') {
                 log_error("--%s requires an argument", m->long_name);
                 rc = -1;
                 continue;

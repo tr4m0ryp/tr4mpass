@@ -48,6 +48,8 @@ ssh_connect_from_env(ssh_sess_t **sess_out)
     const char *user = env_or("TR4MPASS_SSH_USER", "root");
     const char *pw   = env_or("TR4MPASS_SSH_PASSWORD", "alpine");
     int port         = env_port_or("TR4MPASS_SSH_PORT", 2222);
+
+    log_debug("path_a_ssh: connecting to %s:%d as '%s'", host, port, user);
     return ssh_open(sess_out, host, port, user, pw);
 }
 
@@ -93,10 +95,12 @@ path_a_jailbreak(device_info_t *dev)
 
     (void)dev;
 
+    log_info("path_a_ssh: jailbreak: opening SSH session to ramdisk");
     if (ssh_connect_from_env(&sess) != 0) {
         log_error("path_a_ssh: jailbreak: SSH connect/auth failed");
         return -1;
     }
+    log_info("path_a_ssh: jailbreak: SSH session established");
 
     /*
      * Remount rootfs read-write.  On apfs-based devices the first call
@@ -106,10 +110,13 @@ path_a_jailbreak(device_info_t *dev)
     {
         int apfs_rc = -1;
         int hfs_rc  = -1;
+        log_info("path_a_ssh: jailbreak: remounting rootfs read-write");
+        log_debug("path_a_ssh: trying apfs mount first");
         ssh_exec(sess,
                  "/sbin/mount -u -w -t apfs /dev/disk0s1s1 /mnt1",
                  &apfs_rc, NULL, 0);
         if (apfs_rc != 0) {
+            log_debug("path_a_ssh: apfs mount failed (rc=%d), trying hfs", apfs_rc);
             ssh_exec(sess,
                      "/sbin/mount -u -w -t hfs /dev/disk0s1s1 /mnt1",
                      &hfs_rc, NULL, 0);
@@ -119,6 +126,7 @@ path_a_jailbreak(device_info_t *dev)
                       apfs_rc, hfs_rc);
             goto done;
         }
+        log_info("path_a_ssh: rootfs mounted rw (%s)", apfs_rc == 0 ? "apfs" : "hfs");
     }
 
     /*
@@ -142,9 +150,11 @@ path_a_jailbreak(device_info_t *dev)
                      "ls -la " MAD_REMOTE_PATH) != 0)
         goto done;
 
+    log_info("path_a_ssh: jailbreak: all patches applied successfully");
     rc = 0;
 
 done:
+    log_debug("path_a_ssh: jailbreak: closing SSH session (rc=%d)", rc);
     ssh_close(sess);
     return rc;
 }
@@ -170,22 +180,32 @@ path_a_replace_mobileactivationd(device_info_t *dev)
 
     (void)dev;
 
+    log_info("path_a_ssh: replace_mad: starting mobileactivationd replacement");
     patched = getenv("TR4MPASS_PATCHED_MAD");
     if (!patched || !*patched) {
         log_error("path_a_ssh: TR4MPASS_PATCHED_MAD is not set");
         return -1;
     }
-    if (file_size_of(patched) < 0) {
-        log_error("path_a_ssh: patched mad '%s' is missing or not a file",
-                  patched);
-        return -1;
+    {
+        off_t sz = file_size_of(patched);
+        if (sz < 0) {
+            log_error("path_a_ssh: patched mad '%s' is missing or not a file",
+                      patched);
+            return -1;
+        }
+        log_info("path_a_ssh: replace_mad: local file '%s' (%lld bytes)",
+                 patched, (long long)sz);
     }
 
+    log_info("path_a_ssh: replace_mad: connecting via SSH...");
     if (ssh_connect_from_env(&sess) != 0) {
         log_error("path_a_ssh: replace_mad: SSH connect/auth failed");
         return -1;
     }
+    log_info("path_a_ssh: replace_mad: SSH session established");
+    log_info("path_a_ssh: replace_mad: SSH session established");
 
+    log_debug("path_a_ssh: replace_mad: backing up original mobileactivationd");
     if (run_required(sess, "backup-mad", MAD_BACKUP_CMD) != 0)
         goto done;
 
@@ -215,9 +235,11 @@ path_a_replace_mobileactivationd(device_info_t *dev)
         log_info("path_a_ssh: verified mad stat: %s", verify_buf);
     }
 
+    log_info("path_a_ssh: replace_mad: mobileactivationd replaced and verified");
     rc = 0;
 
 done:
+    log_debug("path_a_ssh: replace_mad: closing SSH session (rc=%d)", rc);
     ssh_close(sess);
     return rc;
 }

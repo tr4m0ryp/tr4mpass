@@ -18,14 +18,15 @@
  *     to the 3-arg or 4-arg form as detected at build time.
  */
 
+#include <stdint.h>
 #include <plist/plist.h>
 #include <stdlib.h>
 
-#ifndef TP_PLIST_HAS_MEM_FREE
-    /* Pre-2.3: no plist_mem_free(); libplist used plain malloc/free. */
-    #ifndef plist_mem_free
-        #define plist_mem_free(p) free(p)
-    #endif
+#if !defined(TP_PLIST_HAS_MEM_FREE)
+    /* Pre-2.3: no plist_mem_free(); libplist used plain malloc/free.
+     * plist_mem_free is a function in libplist, not a macro, so the flag
+     * alone decides whether this fallback applies. */
+    #define plist_mem_free(p) free(p)
 #endif
 
 static inline void tp_plist_mem_free(void *p)
@@ -43,17 +44,13 @@ static inline void tp_plist_mem_free(void *p)
         return (int)plist_from_memory(data, length, out, fmt_out);
     }
 #else
-    /* Pre-2.3: 3-arg form; format_out is ignored because the older
-     * API cannot report the parsed format.
+    /*
+     * The 3-arg plist_from_memory() does not exist in libplist 2.3+.
+     * If TP_PLIST_HAS_FMT_ARG was not set, the installed libplist is
+     * too old or the Makefile canary failed.  Fail loudly at compile
+     * time instead of producing a cryptic argument-count error.
      */
-    static inline int tp_plist_from_memory(const char *data,
-                                           uint32_t length,
-                                           plist_t *out,
-                                           void *fmt_out)
-    {
-        (void)fmt_out;
-        return (int)plist_from_memory(data, length, out);
-    }
+    #error "plist_from_memory 3-arg fallback not supported -- rebuild with libplist >= 2.3 (TP_PLIST_HAS_FMT_ARG)"
 #endif
 
 #endif /* TP_PLIST_COMPAT_H */

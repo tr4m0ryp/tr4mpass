@@ -66,7 +66,9 @@ path_a_ramdisk_poll_ssh(int port, int timeout_sec)
     start = time(NULL);
     for (;;) {
         if (poll_ssh_once(port) == 0) {
-            log_info("path_a_ramdisk: SSH port %d is up", port);
+            now = time(NULL);
+            log_info("path_a_ramdisk: SSH port %d is up (after %lds)",
+                     port, (long)(now - start));
             return 0;
         }
         now = time(NULL);
@@ -75,6 +77,8 @@ path_a_ramdisk_poll_ssh(int port, int timeout_sec)
                       " within %ds", port, timeout_sec);
             return -1;
         }
+        log_debug("path_a_ramdisk: SSH poll: port %d not ready, %lds / %ds",
+                  port, (long)(now - start), timeout_sec);
         sleep(SSH_POLL_INTERVAL_SEC);
     }
 }

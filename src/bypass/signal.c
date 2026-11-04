@@ -29,6 +29,10 @@ signal_type_t signal_detect_type(const device_info_t *dev)
     has_imei = field_present(dev->imei);
     has_meid = field_present(dev->meid);
 
+    log_debug("[signal] signal_detect_type: IMEI=%s MEID=%s",
+              has_imei ? "present" : "absent",
+              has_meid ? "present" : "absent");
+
     if (has_meid && has_imei)
         return SIGNAL_DUAL;
     if (has_meid)
@@ -51,14 +55,15 @@ int signal_get_carrier_id(const device_info_t *dev, char *buf, size_t len)
         return -1;
     }
 
-    /* Prefer MEID: more reliable for CDMA activation records per research. */
     if (field_present(dev->meid)) {
         snprintf(buf, len, "%s", dev->meid);
+        log_debug("[signal] signal_get_carrier_id: using MEID %s", buf);
         return 0;
     }
 
     if (field_present(dev->imei)) {
         snprintf(buf, len, "%s", dev->imei);
+        log_debug("[signal] signal_get_carrier_id: using IMEI %s", buf);
         return 0;
     }
 

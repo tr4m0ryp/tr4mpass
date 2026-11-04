@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include <getopt.h>
+#include <curl/curl.h>
 
 #include "tr4mpass.h"
 #include "device/device.h"
@@ -59,6 +61,57 @@ static void print_usage(const char *prog)
     cli_flags_print_help();
 }
 
+static int parse_hex_u32_arg(const char *arg, uint32_t *out)
+{
+    char *end = NULL;
+    unsigned long v;
+
+    if (!arg || !out)
+        return -1;
+
+    errno = 0;
+    v = strtoul(arg, &end, 16);
+    if (errno != 0 || end == arg)
+        return -1;
+    while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
+        end++;
+    if (*end != '\0')
+        return -1;
+    if (v > UINT32_MAX)
+        return -1;
+    *out = (uint32_t)v;
+    return 0;
+}
+
+static int parse_hex_u64_arg(const char *arg, uint64_t *out)
+{
+    char *end = NULL;
+    unsigned long long v;
+
+    if (!arg || !out)
+        return -1;
+
+    /* strtoull silently negates a leading '-'; reject it outright. */
+    {
+        const char *p = arg;
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (*p == '-')
+            return -1;
+    }
+
+    errno = 0;
+    v = strtoull(arg, &end, 16);
+    if (errno != 0 || end == arg)
+        return -1;
+    while (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')
+        end++;
+    if (*end != '\0')
+        return -1;
+    *out = (uint64_t)v;
+    return 0;
+}
+
 static int parse_args(int argc, char *argv[], cli_opts_t *opts)
 {
     enum {
@@ -105,15 +158,28 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         case 'a': opts->force_path_a   = 1; break;
         case 'b': opts->force_path_b   = 1; break;
         case OPT_CPID:
-            opts->cpid_override     = (uint32_t)strtoul(optarg, NULL, 16);
+            if (parse_hex_u32_arg(optarg, &opts->cpid_override) != 0) {
+                log_error("invalid CPID override: '%s'", optarg);
+                return -1;
+            }
             opts->has_cpid_override = 1;
             break;
         case OPT_ECID:
-            opts->ecid_override     = (uint64_t)strtoull(optarg, NULL, 16);
+            if (parse_hex_u64_arg(optarg, &opts->ecid_override) != 0) {
+                log_error("invalid ECID override: '%s'", optarg);
+                return -1;
+            }
             opts->has_ecid_override = 1;
             break;
         case 'h': print_usage(argv[0]); return 1;
-        case '?': /* unknown flag -- defer to cli_parse_bypass_flags */
+        case '?':
+            /* Missing value for --cpid/--ecid: optopt holds the option code. */
+            if (optopt == OPT_CPID || optopt == OPT_ECID) {
+                log_error("option --%s requires an argument",
+                          optopt == OPT_CPID ? "cpid" : "ecid");
+                return -1;
+            }
+            /* unknown flag -- defer to cli_parse_bypass_flags */
             break;
         default:  print_usage(argv[0]); return -1;
         }
@@ -259,11 +325,22 @@ int main(int argc, char *argv[])
         env_print_tr4mpass_summary();
     }
 
-    if (usb_dfu_init() < 0) {
-        log_error("Failed to initialize USB subsystem");
+    /* libcurl global state is set up once here and torn down at exit. */
+    if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        log_error("libcurl: curl_global_init failed");
         return 1;
     }
+    atexit(curl_global_cleanup);
+
+    log_info("[step 1/4] Initializing USB subsystem");
+    if (usb_dfu_init() < 0) {
+        log_error("[step 1/4] FAILED: could not initialize USB (libusb)");
+        return 1;
+    }
+
+    log_info("[step 2/4] Detecting device (DFU mode first, then normal mode)");
     if (detect_device(&dev, &opts) < 0) {
+        log_error("[step 2/4] FAILED: no device detected. Check the USB cable and the mode (DFU or normal)");
         usb_dfu_cleanup();
         return 1;
     }
@@ -306,6 +383,9 @@ int main(int argc, char *argv[])
 
     enrich_chip_info(&dev);
     device_print_info(&dev);
+    log_info("[step 2/4] OK: device identified (mode %s, CPID=0x%04X, ECID=0x%llX)",
+             dev.handle ? "normal" : "DFU",
+             dev.cpid, (unsigned long long)dev.ecid);
 
     if (opts.detect_only) {
         log_info("Detect-only mode, exiting");
@@ -385,12 +465,16 @@ ao_done:
         return 0;
     }
 
-    log_info("Executing module: %s", mod->name);
+    log_info("[step 3/4] Selected module: %s", mod->name);
+    log_info("[step 4/4] Running module %s", mod->name);
     ret = bypass_execute(mod, &dev);
-    if (ret == 0)
+    if (ret == 0) {
+        log_info("[step 4/4] OK: module %s finished without error", mod->name);
         printf("\n[+] Bypass completed successfully.\n");
-    else
+    } else {
+        log_error("[step 4/4] FAILED: module %s returned error %d. Check the [ERROR] lines just above", mod->name, ret);
         printf("\n[-] Bypass failed (error %d).\n", ret);
+    }
 
     cleanup(&dev);
     return (ret == 0) ? 0 : 1;
