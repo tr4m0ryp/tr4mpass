@@ -5,6 +5,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
@@ -38,6 +39,10 @@ static libusb_context *g_ctx = NULL;
  */
 static char    g_pre_claim_serial[DFU_SERIAL_MAX];
 static uint8_t g_pre_claim_iserial_idx;
+
+static int read_string_descriptor_utf16_ascii(libusb_device_handle *handle,
+                                              uint8_t index,
+                                              unsigned char *buf, size_t buf_len);
 
 int usb_dfu_init(void)
 {
@@ -136,10 +141,10 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
                 int n = 0;
                 int attempt;
                 for (attempt = 0; attempt < 5; attempt++) {
-                    n = libusb_get_string_descriptor_ascii(
+                    n = read_string_descriptor_utf16_ascii(
                             *handle, desc.iSerialNumber,
                             (unsigned char *)g_pre_claim_serial,
-                            (int)sizeof(g_pre_claim_serial) - 1);
+                            sizeof(g_pre_claim_serial));
                     if (n > 0)
                         break;
                     if (attempt < 4)
@@ -204,22 +209,89 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
     return 0;
 }
 
+int usb_dfu_reopen(libusb_device_handle **handle, uint8_t *iserial_out)
+{
+    int attempt;
+
+    if (!handle)
+        return -1;
+    *handle = NULL;
+    if (iserial_out)
+        *iserial_out = 0;
+
+    if (!g_ctx)
+        return -1;
+
+    for (attempt = 0; attempt < 20; attempt++) {
+        libusb_device **devs = NULL;
+        ssize_t count, i;
+
+        if (attempt > 0)
+            usleep(attempt < 4 ? 50000 : 250000); /* 50ms first 3, then 250ms */
+
+        count = libusb_get_device_list(g_ctx, &devs);
+        if (count < 0)
+            continue;
+
+        for (i = 0; i < count; i++) {
+            struct libusb_device_descriptor desc;
+            if (libusb_get_device_descriptor(devs[i], &desc) != LIBUSB_SUCCESS)
+                continue;
+            if (desc.idVendor == APPLE_VID && desc.idProduct == DFU_PID) {
+                if (libusb_open(devs[i], handle) != LIBUSB_SUCCESS) {
+                    *handle = NULL;
+                    continue;
+                }
+                if (iserial_out)
+                    *iserial_out = desc.iSerialNumber;
+                log_info("DFU device reopened (bus %d, addr %d, iSerial=%u, try %d)",
+                         libusb_get_bus_number(devs[i]),
+                         libusb_get_device_address(devs[i]),
+                         (unsigned)desc.iSerialNumber, attempt + 1);
+                libusb_free_device_list(devs, 1);
+                /*
+                 * Do NOT claim the interface.  libusb_claim_interface
+                 * sends SET_INTERFACE which resets the DFU state machine
+                 * and destroys staged data.  All DFU traffic is
+                 * control transfers on EP0 — no claim needed.
+                 */
+                return 0;
+            }
+        }
+        libusb_free_device_list(devs, 1);
+    }
+    return -1;
+}
+
 /* Parse hex value after key prefix (e.g. "CPID:" -> 0x8015). */
 static int parse_hex_field(const char *serial, const char *key, uint64_t *out)
 {
     const char *p;
     char *endptr;
+    const char *start;
 
     if (!serial || !key || !out)
         return -1;
     p = strstr(serial, key);
     if (!p)
         return -1;
+
+    start = p + strlen(key);
+    errno = 0;
     endptr = NULL;
-    *out = strtoull(p + strlen(key), &endptr, 16);
-    if (!endptr || endptr == p + strlen(key)) {
+    *out = strtoull(start, &endptr, 16);
+
+    if (errno != 0 || endptr == start) {
         log_warn("parse_hex_field: garbage value for key '%s'", key);
         *out = 0;
+        return -1;
+    }
+
+    if (*endptr != '\0' && *endptr != ' ' && *endptr != '\t' &&
+        *endptr != '\r' && *endptr != '\n') {
+        log_warn("parse_hex_field: trailing junk after key '%s'", key);
+        *out = 0;
+        return -1;
     }
     return 0;
 }
@@ -283,15 +355,9 @@ static int try_read_serial_descriptor(libusb_device_handle *handle,
         return LIBUSB_ERROR_INVALID_PARAM;
 
     for (attempt = 0; attempt < 3; attempt++) {
-        ret = libusb_get_string_descriptor_ascii(handle, index,
-                                                 buf, (int)buf_len);
+        ret = read_string_descriptor_utf16_ascii(handle, index, buf, buf_len);
         if (ret > 0)
             break;
-        if (ret == 0 || ret == LIBUSB_ERROR_TIMEOUT) {
-            int fb = read_string_descriptor_utf16_ascii(handle, index, buf, buf_len);
-            if (fb > 0)
-                return fb;
-        }
         if (ret >= 0)
             break;
         if (ret != LIBUSB_ERROR_PIPE && ret != LIBUSB_ERROR_TIMEOUT)
@@ -495,6 +561,11 @@ int usb_dfu_send(libusb_device_handle *handle, const void *data, size_t len)
             usb_print_error(ret);
             return -1;
         }
+        if (ret == 0) {
+            /* Zero-byte transfer: sent would never advance and the loop would spin forever. */
+            log_error("DFU DNLOAD transferred 0 bytes at offset %zu", sent);
+            return -1;
+        }
 
         sent += (size_t)ret;
         log_debug("DFU DNLOAD block %u: sent %zu / %zu bytes", (unsigned)block_num, sent, len);
@@ -542,8 +613,8 @@ void usb_dfu_close(libusb_device_handle *handle)
     libusb_release_interface(handle, 0);
     libusb_close(handle);
     /* Invalidate the pre-claim serial cache so the next usb_dfu_find
-     * reads a fresh descriptor (important after exploit -- the serial
-     * may now contain "PWND:" which the stale cache would hide). */
+     * reads a fresh descriptor (important after processing -- the serial
+     * may have changed and the stale cache would hide it). */
     g_pre_claim_serial[0] = '\0';
     g_pre_claim_iserial_idx = 0;
     log_debug("DFU device handle closed");

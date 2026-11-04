@@ -1,6 +1,6 @@
 /*
  * mock_hw_stubs.c -- Stubs for hardware-specific routines that the test
- * binary does not include (everything under src/exploit and
+ * binary does not include (everything under src/dfu/ and
  * src/device/usb_dfu.c).
  *
  * The mock test build excludes those real implementations because they
@@ -16,16 +16,20 @@
 #include "exploit/checkm8.h"
 #include "exploit/dfu_proto.h"
 
+#if defined(__APPLE__)
+#include "exploit/iokit_usb.h"
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-/* Phase 3: let tests force checkm8_exploit / checkm8_verify_pwned to
- * return specific values without faulting the rest of the pipeline. */
+/* Phase 3: let tests force checkm8 stubs to return specific values
+ * without faulting the rest of the pipeline. */
 static int g_checkm8_exploit_result        = 0;   /* 0 = success */
 static int g_checkm8_exploit_result_set    = 0;
-static int g_checkm8_verify_pwned_result   = 1;   /* 1 = pwned */
+static int g_checkm8_verify_pwned_result   = 1;   /* 1 = modified */
 static int g_checkm8_verify_pwned_set      = 0;
 
 void mock_checkm8_set_exploit_result(int result)
@@ -49,7 +53,7 @@ void mock_checkm8_reset(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* src/exploit/checkm8.c                                              */
+/* src/dfu/checkm8.c                                              */
 /* ------------------------------------------------------------------ */
 
 int checkm8_exploit(device_info_t *dev)
@@ -81,8 +85,8 @@ int checkm8_stage_patch(exploit_ctx_t *ctx)  { (void)ctx; return 0; }
 /* src/device/usb_dfu.c                                               */
 /* ------------------------------------------------------------------ */
 
-int usb_dfu_init(void)    { return 0; }
-void usb_dfu_cleanup(void) {}
+int usb_exploit_init(void)    { return 0; }
+void usb_exploit_cleanup(void) {}
 
 int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
 {
@@ -127,7 +131,7 @@ void usb_dfu_close(libusb_device_handle *handle)
 }
 
 /* ------------------------------------------------------------------ */
-/* src/exploit/dfu_proto.c                                            */
+/* src/dfu/dfu_proto.c                                            */
 /* ------------------------------------------------------------------ */
 
 int dfu_get_status(libusb_device_handle *dev, dfu_status_t *status)
@@ -163,3 +167,28 @@ int dfu_send_data(libusb_device_handle *dev, const void *data, size_t len)
 
 int dfu_reset_to_idle(libusb_device_handle *dev)
 { (void)dev; return 0; }
+
+/* ------------------------------------------------------------------ */
+/* src/dfu/iokit_usb.c (macOS only)                                   */
+/*                                                                    */
+/* src/dfu/* is excluded from the mock build, but src/util/           */
+/* usb_helpers.c references these symbols on Apple platforms.         */
+/* Keep them inactive so the mock build links and uses libusb mocks.  */
+/* ------------------------------------------------------------------ */
+
+#if defined(__APPLE__)
+int iokit_usb_is_active(void)
+{
+    return 0;
+}
+
+int iokit_usb_ctrl_transfer(uint8_t bmRequestType, uint8_t bRequest,
+                            uint16_t wValue, uint16_t wIndex,
+                            void *data, uint16_t wLength,
+                            uint32_t timeout_ms)
+{
+    (void)bmRequestType; (void)bRequest; (void)wValue; (void)wIndex;
+    (void)data; (void)wLength; (void)timeout_ms;
+    return -1;
+}
+#endif
