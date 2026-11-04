@@ -1,11 +1,11 @@
 /*
- * cli_flags.h -- Bypass-pipeline CLI flag parsing for tr4mpass.
+ * cli_flags.h -- Pipeline-pipeline CLI flag parsing for tr4mpass.
  *
  * main.c owns the existing short flags (--verbose, --dry-run,
  * --detect-only, --force-path-a/b, --cpid, --ecid) and passes argv
  * here for a second parse that translates --ramdisk, --ssh-host etc
  * into setenv() calls.  The env vars are consumed later by Phase 2B
- * (ramdisk staging) and Phase 2C (SSH jailbreak).
+ * (ramdisk staging) and Phase 2C (SSH delivery).
  *
  * The helper here is intentionally additive: unknown flags are
  * ignored (getopt_long returns '?' when the short option list is
@@ -16,7 +16,7 @@
 #define TR4MPASS_CLI_FLAGS_H
 
 /*
- * Parse argv for bypass-pipeline env overrides and apply them via
+ * Parse argv for pipeline-pipeline env overrides and apply them via
  * setenv(..., 1).  This is called after main.c's own getopt_long
  * loop so the short flags already consumed by main.c remain visible
  * to getopt via argv -- we simply skip anything we do not recognize.
@@ -25,10 +25,10 @@
  * value).  Help output for the new flags is produced by
  * cli_flags_print_help() so main.c --help can delegate.
  */
-int cli_parse_bypass_flags(int argc, char *argv[]);
+int cli_parse_pipeline_flags(int argc, char *argv[]);
 
 /*
- * Print the bypass-pipeline flag block used by --help.  Kept separate
+ * Print the pipeline-pipeline flag block used by --help.  Kept separate
  * so main.c keeps responsibility for the overall usage banner.
  */
 void cli_flags_print_help(void);

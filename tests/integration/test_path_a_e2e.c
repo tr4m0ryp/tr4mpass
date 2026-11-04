@@ -1,9 +1,9 @@
 /*
- * test_path_a_e2e.c -- End-to-end Path A bypass pipeline tests.
+ * test_path_a_e2e.c -- End-to-end Path A pipeline pipeline tests.
  *
  * Drives path_a_module.execute() against the full mock stack with Phase 2
  * modules linked in.  checkm8 is stubbed by mock_hw_stubs.c so each stage
- * is individually inject-failable.  Six scenarios: happy, exploit-fail,
+ * is individually inject-failable.  Six scenarios: happy, stage-fail,
  * ramdisk-timeout, SSH-auth-fail, SCP-fail, missing-env.  Call ordering
  * is verified via the shared mock log (checkm8 -> iBSS -> iBEC -> "go"
  * -> "bootx" -> ssh -> mount -> jbinit -> backup-mad -> SCP).
@@ -12,7 +12,7 @@
 #include "test_framework.h"
 #include "integration_helpers.h"
 
-#include "bypass/path_a.h"
+#include "pipeline/path_a.h"
 #include "device/device.h"
 #include "mocks/mock_control.h"
 
@@ -27,7 +27,7 @@
 static void
 stage_happy_ssh(void)
 {
-    /* path_a_jailbreak: rw mount, nvram (advisory), amfi-patch, verify. */
+    /* path_a_deliver: rw mount, nvram (advisory), amfi-patch, verify. */
     mock_ssh_set_exec_response("mount -u -w -t apfs", 0, NULL, 0);
     mock_ssh_set_exec_response("nvram auto-boot=false", 0, NULL, 0);
     mock_ssh_set_exec_response("jbinit", 0, NULL, 0);
@@ -70,8 +70,8 @@ test_path_a_e2e_happy_path(void)
     rc = path_a_module.execute(&dev);
     ASSERT_EQ(rc, 0);
 
-    ASSERT_EQ(mock_call_log_contains("checkm8_exploit"),      1);
-    ASSERT_EQ(mock_call_log_contains("checkm8_verify_pwned"), 1);
+    ASSERT_EQ(mock_call_log_contains("checkm8_run"),      1);
+    ASSERT_EQ(mock_call_log_contains("checkm8_verify"), 1);
     ASSERT_EQ(mock_call_log_contains("irecv_open_with_ecid"), 1);
     ASSERT_EQ(mock_call_log_contains(fx.ibss),                1);
     ASSERT_EQ(mock_call_log_contains(fx.ibec),                1);
@@ -88,7 +88,7 @@ test_path_a_e2e_happy_path(void)
     ASSERT_EQ(mock_call_log_contains(
                   "mobileactivation_get_activation_state"),        1);
 
-    ASSERT_EQ(e2e_ordering_ok("checkm8_exploit",
+    ASSERT_EQ(e2e_ordering_ok("checkm8_run",
                               "irecv_open_with_ecid"),       1);
     ASSERT_EQ(e2e_ordering_ok(fx.ibss, fx.ibec),             1);
     ASSERT_EQ(e2e_ordering_ok("irecv_send_command(go)",
@@ -103,26 +103,26 @@ test_path_a_e2e_happy_path(void)
     e2e_fixture_teardown(&fx);
 }
 
-/* Exploit failure stops the pipeline at step 1 -- no further mock calls. */
+/* Stage failure stops the pipeline at step 1 -- no further mock calls. */
 static void
-test_path_a_e2e_exploit_fails(void)
+test_path_a_e2e_stage_fails(void)
 {
     device_info_t dev;
     e2e_fixture_t fx;
     int rc;
 
-    printf("  [e2e] path_a exploit failure\n");
+    printf("  [e2e] path_a stage failure\n");
 
     mock_reset_all();
     ASSERT_EQ(e2e_fixture_init(&fx), 0);
-    mock_checkm8_set_exploit_result(-1);
+    mock_checkm8_set_stage_result(-1);
     dev = e2e_make_device_path_a();
 
     rc = path_a_module.execute(&dev);
     ASSERT_EQ(rc, -1);
 
-    ASSERT_EQ(mock_call_log_contains("checkm8_exploit"),       1);
-    ASSERT_EQ(mock_call_log_contains("checkm8_verify_pwned"),  0);
+    ASSERT_EQ(mock_call_log_contains("checkm8_run"),       1);
+    ASSERT_EQ(mock_call_log_contains("checkm8_verify"),  0);
     ASSERT_EQ(mock_call_log_contains("irecv_open_with_ecid"),  0);
     ASSERT_EQ(mock_call_log_contains("libssh2_userauth_password"), 0);
     ASSERT_EQ(mock_call_log_contains("libssh2_scp_send"),      0);
@@ -133,7 +133,7 @@ test_path_a_e2e_exploit_fails(void)
 
 /*
  * iBSS uploads, reconnect never succeeds -- pipeline fails at ramdisk.
- * The FIFO returns success once (for the initial pwned DFU open), then
+ * The FIFO returns success once (for the initial processed DFU open), then
  * the sticky flag forces every subsequent open to fail.
  */
 static void
@@ -189,7 +189,7 @@ test_path_a_e2e_ssh_auth_fails(void)
     e2e_fixture_teardown(&fx);
 }
 
-/* Jailbreak OK, SCP upload fails -- activation never attempted. */
+/* Delivery OK, SCP upload fails -- activation never attempted. */
 static void
 test_path_a_e2e_scp_fails(void)
 {
@@ -244,7 +244,7 @@ run_path_a_integration_tests(void)
 {
     printf("--- Section 10: Path A end-to-end integration ---\n");
     test_path_a_e2e_happy_path();
-    test_path_a_e2e_exploit_fails();
+    test_path_a_e2e_stage_fails();
     test_path_a_e2e_ramdisk_timeout();
     test_path_a_e2e_ssh_auth_fails();
     test_path_a_e2e_scp_fails();

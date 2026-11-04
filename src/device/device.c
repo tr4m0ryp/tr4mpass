@@ -221,10 +221,10 @@ int device_query_info(device_info_t *dev)
         if (chip) {
             snprintf(dev->chip_name, sizeof(dev->chip_name), "%s",
                      chip->name);
-            dev->checkm8_vulnerable = chip->checkm8_vulnerable;
+            dev->checkm8_compatible = chip->checkm8_compatible;
         } else {
             snprintf(dev->chip_name, sizeof(dev->chip_name), "Unknown");
-            dev->checkm8_vulnerable = 0;
+            dev->checkm8_compatible = 0;
             log_warn("CPID 0x%04X not found in chip database", dev->cpid);
         }
     }
@@ -267,8 +267,8 @@ void device_print_info(const device_info_t *dev)
     printf("  ECID:             0x%llX\n", (unsigned long long)dev->ecid);
     printf("  Chip Name:        %s\n",
            dev->chip_name[0] ? dev->chip_name : "(unknown)");
-    printf("  checkm8 vuln:     %s\n",
-           dev->checkm8_vulnerable ? "YES" : "NO");
+    printf("  checkm8 compat:   %s\n",
+           dev->checkm8_compatible ? "YES" : "NO");
     printf("  Cellular:         %s\n",
            dev->is_cellular ? "YES" : "NO (WiFi-only)");
     printf("  DFU Mode:         %s\n",

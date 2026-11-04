@@ -40,7 +40,7 @@ typedef struct {
     uint64_t ecid;                             /* exclusive chip ID              */
     char     meid[DEVICE_FIELD_LEN];           /* MEID for CDMA devices          */
     char     chip_name[DEVICE_CHIP_NAME_LEN];  /* "A10", "A11", etc. from chip_db */
-    int      checkm8_vulnerable;               /* 1 if A5-A11, 0 if A12+         */
+    int      checkm8_compatible;               /* 1 if A5-A11, 0 if A12+         */
 
     /* Connectivity */
     int is_cellular;     /* 1 if IMEI or MEID present */

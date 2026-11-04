@@ -4,7 +4,7 @@
  * Two boundaries matter for Path B.  First, identity manipulation (DFU
  * read + recovery setenv) is expected to work on real hardware -- iBoot
  * accepts the PWND marker.  Second, activation itself is blocked by the
- * SEP nonce barrier documented in 26.3-vulnerability.md; FairPlayKeyData,
+ * SEP nonce barrier documented in 26.3-compatibility condition.md; FairPlayKeyData,
  * RKCData, and SepNonce are sealed by the Secure Enclave.  The tool's
  * honest behaviour on real A12+ hardware is a clean failure at
  * mobileactivation_activate_with_session().
@@ -27,8 +27,8 @@
 #include "activation/activation.h"
 #include "activation/record.h"
 #include "activation/session.h"
-#include "bypass/path_b.h"
-#include "bypass/signal.h"
+#include "pipeline/path_b.h"
+#include "pipeline/signal.h"
 #include "device/device.h"
 #include "mocks/mock_control.h"
 
@@ -152,7 +152,7 @@ test_path_b_e2e_activation_rejected_by_nonce_barrier(void)
     dev.handle   = (idevice_t)(uintptr_t)0x1;
     dev.lockdown = (lockdownd_client_t)(uintptr_t)0x2;
 
-    /* See 26.3-vulnerability.md: SepNonce cannot be produced without
+    /* See 26.3-compatibility condition.md: SepNonce cannot be produced without
      * SEP-level access, so real hardware rejects the record at this
      * layer.  The test simulates that rejection. */
     mock_mobileactivation_set_activate_error(

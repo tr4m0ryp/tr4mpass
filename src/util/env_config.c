@@ -1,7 +1,7 @@
 /*
  * env_config.c -- Central env-var lookup and summary for tr4mpass.
  *
- * Every bypass component that reads TR4MPASS_* configuration goes
+ * Every pipeline component that reads TR4MPASS_* configuration goes
  * through env_get / env_get_int here so defaulting and logging stay
  * consistent.  The list of variables printed by --verbose lives in
  * `g_tr4mpass_vars` below; adding a new TR4MPASS_* means adding a row.

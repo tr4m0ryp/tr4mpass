@@ -15,7 +15,7 @@ static void test_chip_db_a9_tsmc(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8000);
     ASSERT_NOTNULL(c);
-    ASSERT_EQ(c->checkm8_vulnerable, 1);
+    ASSERT_EQ(c->checkm8_compatible, 1);
     ASSERT(strstr(c->name, "A9") != NULL);
 }
 
@@ -23,14 +23,14 @@ static void test_chip_db_a9_samsung(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8003);
     ASSERT_NOTNULL(c);
-    ASSERT_EQ(c->checkm8_vulnerable, 1);
+    ASSERT_EQ(c->checkm8_compatible, 1);
 }
 
 static void test_chip_db_a11(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8015);
     ASSERT_NOTNULL(c);
-    ASSERT_EQ(c->checkm8_vulnerable, 1);
+    ASSERT_EQ(c->checkm8_compatible, 1);
     ASSERT(strstr(c->name, "A11") != NULL);
 }
 
@@ -38,14 +38,14 @@ static void test_chip_db_a12(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8020);
     ASSERT_NOTNULL(c);
-    ASSERT_EQ(c->checkm8_vulnerable, 0);
+    ASSERT_EQ(c->checkm8_compatible, 0);
 }
 
 static void test_chip_db_a14(void)
 {
     const chip_info_t *c = chip_db_lookup(0x8101);
     ASSERT_NOTNULL(c);
-    ASSERT_EQ(c->checkm8_vulnerable, 0);
+    ASSERT_EQ(c->checkm8_compatible, 0);
 }
 
 static void test_chip_db_unknown(void)

@@ -29,10 +29,10 @@ chip_db_name(uint32_t cpid)
 }
 
 int
-chip_db_is_checkm8_vulnerable(uint32_t cpid)
+chip_db_is_checkm8_compatible(uint32_t cpid)
 {
     const chip_info_t *info = chip_db_lookup(cpid);
-    return (info != NULL) ? info->checkm8_vulnerable : 0;
+    return (info != NULL) ? info->checkm8_compatible : 0;
 }
 
 void
@@ -41,7 +41,7 @@ chip_db_print_all(void)
     const chip_info_t *p;
 
     printf("%-8s %-5s %-38s %4s %5s %5s %4s %18s\n",
-           "CPID", "Name", "Marketing", "Vuln", "Leak", "OvPad", "Hole",
+           "CPID", "Name", "Marketing", "Compat", "Leak", "OvPad", "Hole",
            "InsecureMemBase");
     printf("%-8s %-5s %-38s %4s %5s %5s %4s %18s\n",
            "--------", "-----", "--------------------------------------",
@@ -52,7 +52,7 @@ chip_db_print_all(void)
                p->cpid,
                p->name,
                p->marketing,
-               p->checkm8_vulnerable,
+               p->checkm8_compatible,
                (unsigned)p->config_large_leak,
                (unsigned)p->config_overwrite_pad,
                (unsigned)p->config_hole,

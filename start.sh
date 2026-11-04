@@ -1,7 +1,7 @@
 #!/bin/bash
-# tr4mpass -- Guided activation lock bypass wrapper
+# tr4mpass -- Guided DFU research wrapper
 # Cross-platform OS detection, dependency installation, device
-# detection, DFU guidance, and bypass execution.
+# detection, DFU guidance, and process execution.
 #
 # The helper routines live in start-helpers.sh so this driver stays
 # under the project's 300-line-per-file limit.
@@ -29,7 +29,7 @@ fi
 
 # ------------------------------------------------------------------ #
 # pkg-config dependency list.  libssh2 is consumed by the Phase 2C   #
-# SSH jailbreak path; if the distro package is missing at build time #
+# SSH delivery path; if the distro package is missing at build time #
 # the production link will fail with "library not found for -lssh2". #
 # Install hints are provided by the helpers for every platform.      #
 # ------------------------------------------------------------------ #
@@ -103,7 +103,7 @@ main() {
         echo "========================================"
         printf "  %-12s %s\n" "Mode:"   "DFU"
         printf "  %-12s %s\n" "Chip:"   "${DEV_CHIP_NAME:-(unknown)} (CPID: ${DEV_CPID:-(unknown)})"
-        printf "  %-12s %s\n" "Bypass:" "$DEV_BYPASS"
+        printf "  %-12s %s\n" "Method:" "$DEV_METHOD"
         printf "  %-12s %s\n" "Status:" "$DEV_STATUS"
         echo "========================================"
         echo ""
@@ -115,7 +115,7 @@ main() {
         fi
 
         msg_ok "Device is supported. Ready to proceed."
-        printf "${BOLD}Press Enter to start bypass...${RESET}"
+        printf "${BOLD}Press Enter to start...${RESET}"
         read -r
     fi
 
@@ -140,7 +140,7 @@ main() {
     fi
 
     # On WSL, keep usbipd auto-attaching the device so it stays visible
-    # after each USB reset the exploit triggers.
+    # after each USB reset the process triggers.
     start_usbipd_auto_attach
 
     # In DFU mode on some WSL/usbipd stacks, descriptor reads can intermittently
