@@ -9,8 +9,6 @@ Free, open-source tool that removes iCloud activation lock from iPhones and iPad
 
 **Supports iOS 12 through 26.1 | iPhone 5s through iPhone 15 Pro**
 
-***For developers and security researchers: read [`26.3-vulnerability.md`](26.3-vulnerability.md) for potential vulnerabilities that could enable bypass on iOS 26.3 and later.***
-
 ---
 
 ## How to Use
@@ -240,16 +238,6 @@ The codebase is written in C99 (21 source files, 20 headers). Every file is unde
 | `src/bypass/` | Path A, Path B, signal detection, deletescript, AFC utils |
 | `src/activation/` | Activation client, session protocol, record builder |
 | `src/util/` | Logging, plist helpers, USB helpers |
-
----
-
-## iOS 26.3+ (Research in Progress)
-
-Current bypass methods work up to iOS 26.1. For iOS 26.2 and later, Apple hardened several security layers that break existing approaches.
-
-We have identified a potential bypass vector through **VU#346053** -- an unpatched vulnerability in Apple's activation server that accepts unsigned XML payloads. This could enable bypass via a captive portal during device setup, without needing any exploit or jailbreak.
-
-**This is not implemented yet.** See [`26.3-vulnerability.md`](26.3-vulnerability.md) for the full technical analysis, proposed attack chain, and implementation roadmap.
 
 ---
 

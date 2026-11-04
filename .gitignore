@@ -39,6 +39,17 @@ credentials.*
 secrets.*
 .irecovery
 
+# External toolchains / SDKs (not part of the build)
+PongoOS/
+SDK/
+newlib/
+pongo-toolchain/
+pongoModules/
+toolchain/
+
+# Graphify output
+graphify-out/
+
 # Claude Code scaffolding
 .claude/
 notes/
