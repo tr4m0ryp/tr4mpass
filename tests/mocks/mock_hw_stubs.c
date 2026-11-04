@@ -1,6 +1,6 @@
 /*
  * mock_hw_stubs.c -- Stubs for hardware-specific routines that the test
- * binary does not include (everything under src/exploit and
+ * binary does not include (everything under src/stage and
  * src/device/usb_dfu.c).
  *
  * The mock test build excludes those real implementations because they
@@ -13,69 +13,69 @@
 
 #include "device/device.h"
 #include "device/usb_dfu.h"
-#include "exploit/checkm8.h"
-#include "exploit/dfu_proto.h"
+#include "dfu/checkm8.h"
+#include "dfu/dfu_proto.h"
 
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-/* Phase 3: let tests force checkm8_exploit / checkm8_verify_pwned to
+/* Phase 3: let tests force checkm8_run / checkm8_verify to
  * return specific values without faulting the rest of the pipeline. */
-static int g_checkm8_exploit_result        = 0;   /* 0 = success */
-static int g_checkm8_exploit_result_set    = 0;
-static int g_checkm8_verify_pwned_result   = 1;   /* 1 = pwned */
-static int g_checkm8_verify_pwned_set      = 0;
+static int g_checkm8_run_result        = 0;   /* 0 = success */
+static int g_checkm8_run_result_set    = 0;
+static int g_checkm8_verify_result   = 1;   /* 1 = processed */
+static int g_checkm8_verify_set      = 0;
 
-void mock_checkm8_set_exploit_result(int result)
+void mock_checkm8_set_stage_result(int result)
 {
-    g_checkm8_exploit_result     = result;
-    g_checkm8_exploit_result_set = 1;
+    g_checkm8_run_result     = result;
+    g_checkm8_run_result_set = 1;
 }
 
-void mock_checkm8_set_verify_pwned_result(int result)
+void mock_checkm8_set_verify_processed_result(int result)
 {
-    g_checkm8_verify_pwned_result = result;
-    g_checkm8_verify_pwned_set    = 1;
+    g_checkm8_verify_result = result;
+    g_checkm8_verify_set    = 1;
 }
 
 void mock_checkm8_reset(void)
 {
-    g_checkm8_exploit_result      = 0;
-    g_checkm8_exploit_result_set  = 0;
-    g_checkm8_verify_pwned_result = 1;
-    g_checkm8_verify_pwned_set    = 0;
+    g_checkm8_run_result      = 0;
+    g_checkm8_run_result_set  = 0;
+    g_checkm8_verify_result = 1;
+    g_checkm8_verify_set    = 0;
 }
 
 /* ------------------------------------------------------------------ */
-/* src/exploit/checkm8.c                                              */
+/* src/dfu/checkm8.c                                              */
 /* ------------------------------------------------------------------ */
 
-int checkm8_exploit(device_info_t *dev)
+int checkm8_run(device_info_t *dev)
 {
-    mock_log_append("checkm8_exploit");
+    mock_log_append("checkm8_run");
     if (!dev)
         return -1;
-    if (g_checkm8_exploit_result_set)
-        return g_checkm8_exploit_result;
+    if (g_checkm8_run_result_set)
+        return g_checkm8_run_result;
     return 0;
 }
 
-int checkm8_verify_pwned(device_info_t *dev)
+int checkm8_verify(device_info_t *dev)
 {
-    mock_log_append("checkm8_verify_pwned");
+    mock_log_append("checkm8_verify");
     if (!dev)
         return -1;
-    if (g_checkm8_verify_pwned_set)
-        return g_checkm8_verify_pwned_result;
+    if (g_checkm8_verify_set)
+        return g_checkm8_verify_result;
     return 1;
 }
 
-int checkm8_stage_reset(exploit_ctx_t *ctx)  { (void)ctx; return 0; }
-int checkm8_stage_setup(exploit_ctx_t *ctx)  { (void)ctx; return 0; }
-int checkm8_stage_spray(exploit_ctx_t *ctx)  { (void)ctx; return 0; }
-int checkm8_stage_patch(exploit_ctx_t *ctx)  { (void)ctx; return 0; }
+int checkm8_stage_reset(dfu_ctx_t *ctx)  { (void)ctx; return 0; }
+int checkm8_stage_setup(dfu_ctx_t *ctx)  { (void)ctx; return 0; }
+int checkm8_stage_spray(dfu_ctx_t *ctx)  { (void)ctx; return 0; }
+int checkm8_stage_patch(dfu_ctx_t *ctx)  { (void)ctx; return 0; }
 
 /* ------------------------------------------------------------------ */
 /* src/device/usb_dfu.c                                               */
@@ -127,7 +127,7 @@ void usb_dfu_close(libusb_device_handle *handle)
 }
 
 /* ------------------------------------------------------------------ */
-/* src/exploit/dfu_proto.c                                            */
+/* src/dfu/dfu_proto.c                                            */
 /* ------------------------------------------------------------------ */
 
 int dfu_get_status(libusb_device_handle *dev, dfu_status_t *status)

@@ -12,7 +12,7 @@
 
 #include "test_framework.h"
 
-#include "bypass/path_a_internal.h"
+#include "pipeline/path_a_internal.h"
 #include "device/device.h"
 #include "mocks/mock_control.h"
 
@@ -113,7 +113,7 @@ make_ramdisk_dev(void)
 {
     device_info_t dev;
     memset(&dev, 0, sizeof(dev));
-    dev.checkm8_vulnerable = 1;
+    dev.checkm8_compatible = 1;
     dev.is_dfu_mode        = 1;
     dev.ecid               = 0x0012345678ABCDEFULL;
     snprintf(dev.product_type, sizeof(dev.product_type), "iPhone10,3");

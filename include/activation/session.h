@@ -12,7 +12,7 @@
  *   5. HandleActivationInfoWithSessionRequest -> finalize
  *
  * Offline mode: stages 2 and 4 construct responses locally (requires
- * patched mobileactivationd -- Path A jailbreak only).
+ * patched mobileactivationd -- Path A delivery only).
  * Online mode: stages 2 and 4 contact albert.apple.com directly.
  */
 

@@ -14,11 +14,11 @@
  * "A10" -- not to freeze every character of every string.
  *
  * If a distro-packaged chip table has legitimately diverged from
- * this file's expectations, `make STRICT_CHIP_DB=0` bypasses the
+ * this file's expectations, `make STRICT_CHIP_DB=0` pipelinees the
  * probe entirely (T5 "Chip-DB canary strictness" note).
  *
  * All rows must remain traceable to gaster.c line numbers -- see
- * include/device/chip_db_table.h and chip_db_table_rop.h.
+ * include/device/chip_db_table.h and chip_db_table_ext.h.
  */
 
 #include "device/chip_db.h"
@@ -30,7 +30,7 @@
 
 struct expected_row {
     uint32_t    cpid;
-    int         checkm8_vulnerable;
+    int         checkm8_compatible;
     const char *name_substr;
     const char *marketing_substr;
 };
@@ -58,7 +58,7 @@ static const struct expected_row g_expected[] = {
     { 0x8011, 1, "A10X",    "iPad Pro" },
     { 0x8015, 1, "A11",     "iPhone" },
     { 0x8012, 1, "T2",      "T2" },
-    /* A12+ must be present but explicitly not checkm8-vulnerable. */
+    /* A12+ must be present but explicitly not checkm8-compatible. */
     { 0x8020, 0, "A12",     "iPhone" },
     { 0x8101, 0, "A14",     "iPhone" },
 };
@@ -92,10 +92,10 @@ int main(void)
             failed++;
             continue;
         }
-        if (row->checkm8_vulnerable != exp->checkm8_vulnerable) {
+        if (row->checkm8_compatible != exp->checkm8_compatible) {
             fprintf(stderr,
-                    "[chip-db-canary] FAIL: CPID 0x%04X checkm8_vulnerable=%d expected %d\n",
-                    exp->cpid, row->checkm8_vulnerable, exp->checkm8_vulnerable);
+                    "[chip-db-canary] FAIL: CPID 0x%04X checkm8_compatible=%d expected %d\n",
+                    exp->cpid, row->checkm8_compatible, exp->checkm8_compatible);
             failed++;
         }
         if (strstr(row->name, exp->name_substr) == NULL) {
@@ -116,7 +116,7 @@ int main(void)
         fprintf(stderr,
                 "[chip-db-canary] FAIL: %zu divergence(s). Rebuild chip_db_table*.h\n"
                 "                 from gaster.c:519-808 (0x7ff/gaster) or\n"
-                "                 bypass with `make STRICT_CHIP_DB=0`.\n",
+                "                 pipeline with `make STRICT_CHIP_DB=0`.\n",
                 failed);
         return 1;
     }

@@ -1,9 +1,9 @@
 /*
- * cli_flags.c -- Convert bypass-pipeline CLI flags into env vars.
+ * cli_flags.c -- Convert pipeline-pipeline CLI flags into env vars.
  *
  * We do our own argv walk rather than getopt_long because main.c's
  * getopt_long pass has already permuted argv by the time we run, and
- * the bypass flags (--ramdisk, --ssh-host, ...) would otherwise be
+ * the pipeline flags (--ramdisk, --ssh-host, ...) would otherwise be
  * separated from their values.  A hand-rolled walk is also the only
  * way to ignore every flag we do not know without coupling to the
  * short-option spec owned by main.c.
@@ -96,7 +96,7 @@ static int apply_env(const char *env_name, const char *value)
 /* Parsing                                                        */
 /* -------------------------------------------------------------- */
 
-int cli_parse_bypass_flags(int argc, char *argv[])
+int cli_parse_pipeline_flags(int argc, char *argv[])
 {
     if (argc <= 1 || !argv)
         return 0;
@@ -143,7 +143,7 @@ int cli_parse_bypass_flags(int argc, char *argv[])
 
 void cli_flags_print_help(void)
 {
-    printf("  Bypass pipeline overrides (also read from environment):\n");
+    printf("  Pipeline pipeline overrides (also read from environment):\n");
     for (size_t i = 0; i < g_flag_map_count; ++i) {
         char head[64];
         snprintf(head, sizeof(head), "--%s %s",

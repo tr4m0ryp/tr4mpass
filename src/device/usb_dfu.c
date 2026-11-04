@@ -192,7 +192,7 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
                        ">/dev/null 2>&1");
                 sleep(3); /* wait for re-enumeration */
             }
-            /* The caller (checkm8_exploit / usb_dfu_find retry) will call
+            /* The caller (checkm8_run / usb_dfu_find retry) will call
              * usb_dfu_find again after returning error. */
             return -1;
         }
@@ -542,7 +542,7 @@ void usb_dfu_close(libusb_device_handle *handle)
     libusb_release_interface(handle, 0);
     libusb_close(handle);
     /* Invalidate the pre-claim serial cache so the next usb_dfu_find
-     * reads a fresh descriptor (important after exploit -- the serial
+     * reads a fresh descriptor (important after stage -- the serial
      * may now contain "PWND:" which the stale cache would hide). */
     g_pre_claim_serial[0] = '\0';
     g_pre_claim_iserial_idx = 0;

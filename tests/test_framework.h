@@ -46,14 +46,14 @@ extern int g_failures;
 /* Existing hardware-independent tests */
 void run_serial_parse_tests(void);
 void run_chip_db_tests(void);
-void run_bypass_probe_tests(void);
+void run_pipeline_probe_tests(void);
 void run_constant_tests(void);
 
 /* Phase 2 placeholders (filled in by other agents) */
 void run_cert_extract_tests(void);
 void run_signer_tests(void);
 void run_ramdisk_tests(void);
-void run_ssh_jailbreak_tests(void);
+void run_ssh_delivery_tests(void);
 
 /* Phase 3 integration sections (mock-only) */
 void run_path_a_integration_tests(void);

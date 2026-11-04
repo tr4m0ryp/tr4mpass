@@ -10,9 +10,9 @@
 #include "device/device.h"
 #include "device/usb_dfu.h"
 #include "device/chip_db.h"
-#include "bypass/bypass.h"
-#include "bypass/path_a.h"
-#include "bypass/path_b.h"
+#include "pipeline/pipeline.h"
+#include "pipeline/path_a.h"
+#include "pipeline/path_b.h"
 #include "activation/session.h"
 #include "activation/activation.h"
 #include "util/log.h"
@@ -37,7 +37,7 @@ static void print_banner(void)
 {
     printf("========================================\n"
            "  tr4mpass v%s\n"
-           "  Activation lock bypass research tool\n"
+           "  iOS DFU research toolkit\n"
            "========================================\n\n", TR4MPASS_VERSION);
 }
 
@@ -86,8 +86,8 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
 
     /*
      * Silence getopt's own errno print for unknown flags -- the
-     * bypass-pipeline long options (handled later by
-     * cli_parse_bypass_flags) show up here as '?' and should not
+     * pipeline-pipeline long options (handled later by
+     * cli_parse_pipeline_flags) show up here as '?' and should not
      * abort the program.
      */
     opterr = 0;
@@ -113,7 +113,7 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
             opts->has_ecid_override = 1;
             break;
         case 'h': print_usage(argv[0]); return 1;
-        case '?': /* unknown flag -- defer to cli_parse_bypass_flags */
+        case '?': /* unknown flag -- defer to cli_parse_pipeline_flags */
             break;
         default:  print_usage(argv[0]); return -1;
         }
@@ -177,32 +177,32 @@ static void enrich_chip_info(device_info_t *dev)
     if (!chip) {
         log_warn("CPID 0x%04X not found in chip database", dev->cpid);
         snprintf(dev->chip_name, sizeof(dev->chip_name), "Unknown");
-        dev->checkm8_vulnerable = 0;
+        dev->checkm8_compatible = 0;
         return;
     }
     snprintf(dev->chip_name, sizeof(dev->chip_name), "%s", chip->name);
-    dev->checkm8_vulnerable = chip->checkm8_vulnerable;
+    dev->checkm8_compatible = chip->checkm8_compatible;
     log_debug("Chip: %s (CPID 0x%04X) -- checkm8 %s",
               chip->name, chip->cpid,
-              chip->checkm8_vulnerable ? "vulnerable" : "not vulnerable");
+              chip->checkm8_compatible ? "compatible" : "not compatible");
 }
 
 static void register_modules(void)
 {
-    if (bypass_register(&path_a_module) < 0)
+    if (pipeline_register(&path_a_module) < 0)
         log_warn("Failed to register Path A module");
-    if (bypass_register(&path_b_module) < 0)
+    if (pipeline_register(&path_b_module) < 0)
         log_warn("Failed to register Path B module");
-    log_debug("Registered %d bypass module(s)", bypass_count());
+    log_debug("Registered %d pipeline module(s)", pipeline_count());
 }
 
 static void print_module_diagnostics(const device_info_t *dev)
 {
-    log_error("No compatible bypass module for this device");
+    log_error("No compatible pipeline module for this device");
     log_error("  DFU=%s CPID=0x%04X Chip=%s checkm8=%s Product=%s",
               dev->is_dfu_mode ? "YES" : "NO", dev->cpid,
               dev->chip_name[0] ? dev->chip_name : "(unknown)",
-              dev->checkm8_vulnerable ? "YES" : "NO",
+              dev->checkm8_compatible ? "YES" : "NO",
               dev->product_type[0] ? dev->product_type : "(unknown)");
 
     if (!dev->is_dfu_mode)
@@ -213,12 +213,12 @@ static void print_module_diagnostics(const device_info_t *dev)
         log_error("Chip CPID 0x%04X not in database.", dev->cpid);
 }
 
-static const bypass_module_t *select_module(device_info_t *dev,
+static const pipeline_module_t *select_module(device_info_t *dev,
                                             const cli_opts_t *opts)
 {
     if (opts->force_path_a) { log_info("Path A forced"); return &path_a_module; }
     if (opts->force_path_b) { log_info("Path B forced"); return &path_b_module; }
-    const bypass_module_t *mod = bypass_select(dev);
+    const pipeline_module_t *mod = pipeline_select(dev);
     if (!mod) { print_module_diagnostics(dev); return NULL; }
     log_info("Auto-selected module: %s", mod->name);
     return mod;
@@ -243,11 +243,11 @@ int main(int argc, char *argv[])
     print_banner();
 
     /*
-     * Apply bypass-pipeline CLI overrides first so argv is still
+     * Apply pipeline-pipeline CLI overrides first so argv is still
      * pristine (main.c's getopt_long below will permute argv).
      */
-    if (cli_parse_bypass_flags(argc, argv) != 0) {
-        log_error("Failed to parse bypass-pipeline CLI flags");
+    if (cli_parse_pipeline_flags(argc, argv) != 0) {
+        log_error("Failed to parse pipeline-pipeline CLI flags");
         return 1;
     }
 
@@ -373,9 +373,9 @@ ao_done:
     }
 
     register_modules();
-    bypass_list();
+    pipeline_list();
 
-    const bypass_module_t *mod = select_module(&dev, &opts);
+    const pipeline_module_t *mod = select_module(&dev, &opts);
     if (!mod) { cleanup(&dev); return 1; }
 
     if (opts.dry_run) {
@@ -386,11 +386,11 @@ ao_done:
     }
 
     log_info("Executing module: %s", mod->name);
-    ret = bypass_execute(mod, &dev);
+    ret = pipeline_execute(mod, &dev);
     if (ret == 0)
-        printf("\n[+] Bypass completed successfully.\n");
+        printf("\n[+] Pipeline completed successfully.\n");
     else
-        printf("\n[-] Bypass failed (error %d).\n", ret);
+        printf("\n[-] Pipeline failed (error %d).\n", ret);
 
     cleanup(&dev);
     return (ret == 0) ? 0 : 1;

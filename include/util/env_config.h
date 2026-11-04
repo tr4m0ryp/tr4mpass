@@ -3,10 +3,10 @@
  * required tr4mpass environment variables are missing.
  *
  * Centralizes lookup, defaulting, and summary printing for every
- * TR4MPASS_* variable used by the bypass pipeline.  Phase 2B and 2C
+ * TR4MPASS_* variable used by the pipeline pipeline.  Phase 2B and 2C
  * read configuration through these helpers; Phase 2D (this module)
  * supplies CLI-flag shims in src/cli/cli_flags.c that set the env
- * vars before the bypass code reads them.
+ * vars before the pipeline code reads them.
  */
 
 #ifndef TR4MPASS_ENV_CONFIG_H

@@ -198,16 +198,16 @@ void mock_ssh_force_scp_error(int err);
 
 /*
  * Force the checkm8 stub to return the given value.  Default is 0 (success).
- * Pass -1 to simulate an exploit-stage failure.
+ * Pass -1 to simulate an stage-stage failure.
  */
-void mock_checkm8_set_exploit_result(int result);
+void mock_checkm8_set_stage_result(int result);
 
 /*
- * Force the checkm8_verify_pwned stub to return the given value.  Default
- * is 1 (pwned).  Pass 0 to simulate a non-pwned device after exploit; -1
+ * Force the checkm8_verify stub to return the given value.  Default
+ * is 1 (processed).  Pass 0 to simulate a non-processed device after stage; -1
  * for a query error.
  */
-void mock_checkm8_set_verify_pwned_result(int result);
+void mock_checkm8_set_verify_processed_result(int result);
 
 /* ------------------------------------------------------------------ */
 /* mobileactivation staging (mock_afc_mobileactivation.c)              */
@@ -217,7 +217,7 @@ void mock_checkm8_set_verify_pwned_result(int result);
  * Stage an error code to be returned by mobileactivation_activate() /
  * mobileactivation_activate_with_session() on the next call.  Used by
  * Path B tests to simulate the SEP nonce barrier documented in
- * 26.3-vulnerability.md.  Pass 0 to clear.
+ * 26.3-compatibility condition.md.  Pass 0 to clear.
  */
 void mock_mobileactivation_set_activate_error(int error_code);
 

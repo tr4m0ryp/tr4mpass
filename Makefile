@@ -73,14 +73,14 @@ clean:
 # chip_db_canary.c's expected (name, marketing, checkm8) tuple, the  #
 # probe exits non-zero and the whole build fails -- guarding against #
 # a repeat of the 0x8947/0x8960 mislabel bug where the CLI announced #
-# the wrong device family. Bypass with STRICT_CHIP_DB=0 only when a  #
+# the wrong device family. Pipeline with STRICT_CHIP_DB=0 only when a  #
 # distro-packaged chip table has legitimately diverged.              #
 # ------------------------------------------------------------------ #
 STRICT_CHIP_DB    ?= 1
 CHIP_DB_CANARY_BIN = tests/chip_db_canary.bin
 
 .chip-db-canary: tests/chip_db_canary.c include/device/chip_db_table.h \
-                 include/device/chip_db_table_rop.h include/device/chip_db.h
+                 include/device/chip_db_table_ext.h include/device/chip_db.h
 	@$(CC) -Wall -Wextra -std=c99 -D_GNU_SOURCE -O2 -Iinclude \
 	    -DSTRICT_CHIP_DB=$(STRICT_CHIP_DB) \
 	    tests/chip_db_canary.c -o $(CHIP_DB_CANARY_BIN)
@@ -93,19 +93,19 @@ CHIP_DB_CANARY_BIN = tests/chip_db_canary.bin
 # No mocks, no real library linkage required for the SUT code.        #
 # ------------------------------------------------------------------ #
 
-TEST_UNITS  = src/device/chip_db.c src/bypass/bypass.c src/util/log.c \
+TEST_UNITS  = src/device/chip_db.c src/pipeline/pipeline.c src/util/log.c \
               src/util/env_config.c
 
 # Sections linked by both `make test` (hw-independent) and `make test-mocks`.
 TEST_SECT_CORE = tests/test_main.c tests/test_parsing.c tests/test_chip_db.c \
-                 tests/test_bypass_probe.c tests/test_constants.c \
+                 tests/test_pipeline_probe.c tests/test_constants.c \
                  tests/test_cert_extract.c tests/test_signer.c \
                  tests/test_env_config.c
 
 # Sections that require the mocked hardware libraries -- only used by
 # `make test-mocks`.  Include stub definitions of their entry points in
 # TEST_SECT_STUBS so the hw-independent target still links.
-TEST_SECT_MOCK = tests/test_ramdisk.c tests/test_ssh_jailbreak.c
+TEST_SECT_MOCK = tests/test_ramdisk.c tests/test_ssh_delivery.c
 
 # Aggregate for the mock build: real section bodies.
 TEST_SECT     = $(TEST_SECT_CORE) $(TEST_SECT_MOCK)
@@ -116,7 +116,7 @@ test: $(TEST_TARGET)
 	./$(TEST_TARGET)
 
 # The hw-independent target replaces the mock-only sections with empty
-# stubs so run_tests still finds run_ramdisk_tests / run_ssh_jailbreak_tests.
+# stubs so run_tests still finds run_ramdisk_tests / run_ssh_delivery_tests.
 $(TEST_TARGET): $(TEST_SECT_CORE) $(TEST_UNITS) tests/mock_section_stubs.c
 	$(CC) $(TEST_CFLAGS) -o $@ $^
 
@@ -125,7 +125,7 @@ $(TEST_TARGET): $(TEST_SECT_CORE) $(TEST_UNITS) tests/mock_section_stubs.c
 #                                                                    #
 # Links the test sections + all tests/mocks/*.c + the production     #
 # sources we want to exercise (everything under src/ except main.c   #
-# and the hardware-specific checkm8/dfu exploit code).  The real     #
+# and the hardware-specific checkm8/dfu stage code).  The real     #
 # hardware libs (libimobiledevice/libirecovery/libusb/libssh2/curl)  #
 # are NOT linked -- the mocks satisfy those symbols.  libplist,      #
 # openssl, and pthread remain real.                                  #
@@ -137,10 +137,10 @@ MOCK_SRCS    = $(shell find tests/mocks -name '*.c')
 INT_SRCS      = $(shell find tests/integration -name '*.c' 2>/dev/null)
 # Production sources to include in the mock build.  We exclude:
 #   - src/main.c (has its own main())
-#   - src/exploit/* and src/device/usb_dfu.c (direct DFU/checkm8 h/w code)
+#   - src/dfu/* and src/device/usb_dfu.c (direct DFU/checkm8 h/w code)
 MOCK_SUT_SRCS = $(shell find src -name '*.c' \
                   -not -path 'src/main.c' \
-                  -not -path 'src/exploit/*' \
+                  -not -path 'src/dfu/*' \
                   -not -path 'src/device/usb_dfu.c')
 MOCK_ALL_SRCS = $(TEST_SECT) $(MOCK_SRCS) $(INT_SRCS) $(MOCK_SUT_SRCS)
 MOCK_TARGET   = tests/run_mock_tests

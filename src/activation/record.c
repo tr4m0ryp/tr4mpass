@@ -157,7 +157,7 @@ static int populate_common_fields(plist_t record,
     /*
      * FairPlayKeyData -- BLOCKED: requires SEP-level access.
      * Sealed by the Secure Enclave; unreadable without an SEP
-     * compromise. See 26.3-vulnerability.md. Placeholder empty blob.
+     * compromise. See 26.3-compatibility condition.md. Placeholder empty blob.
      */
     plist_dict_set_item(record, "FairPlayKeyData", plist_new_data("", 0));
 
@@ -218,14 +218,14 @@ plist_t record_build_a12_with_client(const device_info_t *dev,
     /*
      * RKCData -- BLOCKED: requires SEP-level access.
      * Remote Key Chain blob sealed by the Secure Enclave. See
-     * 26.3-vulnerability.md. Placeholder empty blob.
+     * 26.3-compatibility condition.md. Placeholder empty blob.
      */
     plist_dict_set_item(record, "RKCData", plist_new_data("", 0));
 
     /*
      * SepNonce -- BLOCKED: requires SEP-level access.
      * Fresh nonce for replay protection, not exposed outside SEP.
-     * See 26.3-vulnerability.md. Placeholder empty blob.
+     * See 26.3-compatibility condition.md. Placeholder empty blob.
      */
     plist_dict_set_item(record, "SepNonce", plist_new_data("", 0));
     plist_dict_set_item(record, "SessionMode", plist_new_bool(1));

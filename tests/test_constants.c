@@ -4,11 +4,11 @@
 
 #include "test_framework.h"
 
-#include "exploit/checkm8_internal.h"
+#include "dfu/checkm8_internal.h"
 
 static void test_retry_constant(void)
 {
-    ASSERT_EQ(MAX_EXPLOIT_TRIES, 3);
+    ASSERT_EQ(MAX_DFU_TRIES, 3);
 }
 
 static void test_reconnect_delay(void)
@@ -18,7 +18,7 @@ static void test_reconnect_delay(void)
 
 void run_constant_tests(void)
 {
-    printf("--- Section 4: Exploit constants ---\n");
+    printf("--- Section 4: Stage constants ---\n");
     test_retry_constant();
     test_reconnect_delay();
 }

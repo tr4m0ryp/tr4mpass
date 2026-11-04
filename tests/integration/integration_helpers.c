@@ -146,7 +146,7 @@ e2e_make_device_path_a(void)
 {
     device_info_t dev;
     memset(&dev, 0, sizeof(dev));
-    dev.checkm8_vulnerable = 1;
+    dev.checkm8_compatible = 1;
     dev.is_dfu_mode        = 1;
     dev.cpid               = 0x8015;
     dev.ecid               = 0x001A2B3C4D5E6F70ULL;
@@ -170,7 +170,7 @@ e2e_make_device_path_b_cellular(void)
 {
     device_info_t dev;
     memset(&dev, 0, sizeof(dev));
-    dev.checkm8_vulnerable = 0;
+    dev.checkm8_compatible = 0;
     dev.is_dfu_mode        = 1;
     dev.cpid               = 0x8020;
     dev.ecid               = 0x0022334455667788ULL;
@@ -195,7 +195,7 @@ e2e_make_device_path_b_wifi(void)
 {
     device_info_t dev;
     memset(&dev, 0, sizeof(dev));
-    dev.checkm8_vulnerable = 0;
+    dev.checkm8_compatible = 0;
     dev.is_dfu_mode        = 1;
     dev.cpid               = 0x8101;
     dev.ecid               = 0x0099AABBCCDDEEFFULL;
