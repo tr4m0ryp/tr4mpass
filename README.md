@@ -5,11 +5,14 @@
 </p>
 
 # New improved version will be released soon
-Free, open-source tool that removes iCloud activation lock from iPhones and iPads. Runs locally on your computer -- no servers, no payments, no accounts needed. Just plug in your device and run.
+Open-source research tool for iCloud activation lock. Runs locally on your computer -- no servers, no payments, no accounts needed.
 
-**Supports iOS 12 through 26.1 | iPhone 5s through iPhone 15 Pro**
+**Working bypass: A5-A11 devices only (checkm8).** On these chips the bypass is backed by the unpatchable checkm8 BootROM exploit.
 
-***For developers and security researchers: read [`26.3-vulnerability.md`](26.3-vulnerability.md) for potential vulnerabilities that could enable bypass on iOS 26.3 and later.***
+> ### ⚠️ A12 and later (Path B) does NOT work -- it is experimental research, not a bypass
+> There is **no public method to bypass Activation Lock on A12+ devices**, this tool included. A12+ has no BootROM exploit (checkm8 stops at A11), so Path B falls back to Apple's own activation protocol -- which refuses: `mobileactivationd` checks the iCloud-lock state locally, and the FairPlay/SEP engine will not issue a valid activation nonce for a locked device (returns "Invalid activation nonce"). The Secure Enclave seals it; it cannot be forged off-device. The tool runs the Path B steps and then **fails cleanly at activation.** Full analysis: [`26.3-vulnerability.md`](26.3-vulnerability.md). The A12+ rows in the tables below are listed because the architecture targets them, **not** because a working bypass exists.
+
+***For developers and security researchers: read [`26.3-vulnerability.md`](26.3-vulnerability.md) for the vulnerability research.***
 
 ---
 
@@ -59,6 +62,8 @@ The script will walk you through this, but here's the short version:
 ---
 
 ## Supported Devices
+
+> **Read this first.** Only **Path A (checkm8, A5-A11)** is a working bypass. Every **Path B (session)** row below -- all A12 and later -- is **experimental research that does NOT currently bypass Activation Lock** (blocked by the SEP/FairPlay activation-nonce barrier; see [`26.3-vulnerability.md`](26.3-vulnerability.md)). "Signal Preserved" likewise only applies where the bypass actually completes.
 
 ### iPhone
 
@@ -201,6 +206,8 @@ DFU Mode -> checkm8 exploit -> load ramdisk -> jailbreak kernel
 ```
 
 ### Path B -- Session Activation (A12 and later)
+
+> **Status: experimental; does not work on real A12+ hardware.** With no BootROM exploit for A12+, this path relies on Apple's own activation protocol -- which refuses. `mobileactivationd` checks the iCloud-lock state locally and the FairPlay/SEP engine will not issue a valid activation nonce for a locked device ("Invalid activation nonce"). Expect a clean failure at the activation step. See [`26.3-vulnerability.md`](26.3-vulnerability.md).
 
 Does not use a hardware exploit. Instead, it manipulates the device's identity in DFU mode, then uses Apple's own activation protocol (drmHandshake session mode) to change the lock state.
 

@@ -325,7 +325,6 @@ int path_b_manipulate_identity(device_info_t *dev)
 {
     char current[DFU_SERIAL_MAX];
     char modified[DFU_SERIAL_MAX];
-    char verify[DFU_SERIAL_MAX];
     int  rc;
 
     if (!dev) {
@@ -333,16 +332,20 @@ int path_b_manipulate_identity(device_info_t *dev)
         return -1;
     }
 
-    if (!dev->usb) {
-        log_error("[path_b_id] No USB handle for DFU mode");
-        return -1;
-    }
+    /*
+     * By this point path_b.c:step_reboot_to_recovery() has moved the device
+     * from DFU into recovery mode and released the DFU handle, so dev->usb
+     * is expected to be NULL here.  path_b_read_serial() and
+     * path_b_write_serial() both route through libirecovery in that state.
+     * (An earlier DFU-only guard rejected the recovery handle outright and
+     * made this step fail every time with "No USB handle for DFU mode".)
+     */
 
     /* Step 1: read current serial */
-    log_info("[path_b_id] Reading current serial descriptor...");
+    log_info("[path_b_id] Reading current serial...");
     rc = path_b_read_serial(dev, current, sizeof(current));
     if (rc != 0) {
-        log_error("[path_b_id] Cannot read serial descriptor");
+        log_error("[path_b_id] Cannot read serial");
         return -1;
     }
     log_info("[path_b_id] Current serial: %s", current);
@@ -361,29 +364,21 @@ int path_b_manipulate_identity(device_info_t *dev)
     }
     log_info("[path_b_id] Modified serial: %s", modified);
 
-    /* Step 4: write modified serial */
-    log_info("[path_b_id] Writing modified serial descriptor...");
+    /*
+     * Step 4: write modified serial via iRecovery setenv.  The setenv
+     * return code (checked in path_b_write_serial_irecovery) is iBoot's
+     * acknowledgement.  We do NOT read the USB serial descriptor back to
+     * verify: setenv changes the serial-number env var, not the
+     * iBoot-generated serial_string descriptor, so a descriptor read-back
+     * never reflects the marker and would false-fail.
+     */
+    log_info("[path_b_id] Writing modified serial...");
     rc = path_b_write_serial(dev, modified);
     if (rc != 0) {
         log_error("[path_b_id] Failed to write modified serial");
         return -1;
     }
 
-    /* Step 5: verify by reading back */
-    log_info("[path_b_id] Verifying serial descriptor...");
-    rc = path_b_read_serial(dev, verify, sizeof(verify));
-    if (rc != 0) {
-        log_warn("[path_b_id] Could not verify serial (read-back failed)");
-        /* Non-fatal: write may have succeeded even if re-read fails. */
-        return 0;
-    }
-
-    if (strstr(verify, "PWND:") == NULL) {
-        log_error("[path_b_id] Verification failed: PWND marker not found");
-        log_error("[path_b_id] Read-back serial: %s", verify);
-        return -1;
-    }
-
-    log_info("[path_b_id] Identity manipulation verified");
+    log_info("[path_b_id] Identity manipulation succeeded");
     return 0;
 }

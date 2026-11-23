@@ -20,6 +20,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <libimobiledevice/mobileactivation.h>
 #include "activation/session.h"
@@ -52,26 +53,45 @@
 /* --- Internal helpers --- */
 
 /*
+ * Service-start retry window.  After a reboot the device reappears on
+ * usbmux (and lockdownd answers the pairing handshake) a few seconds
+ * before com.apple.mobileactivationd is registered with lockdownd, so a
+ * cold start races the daemon and returns MOBILEACTIVATION_E_UNKNOWN_ERROR
+ * (-256) -- worse over a VM's USB passthrough.  Retry before giving up.
+ * ponytail: fixed 2s backoff; widen the count/delay if real hardware needs
+ * longer for the activation daemon to come up.
+ */
+#define MA_START_ATTEMPTS    15
+#define MA_START_DELAY_USEC  2000000   /* 2 s between attempts */
+
+/*
  * Start mobileactivation service and return a client handle.
  * Caller must call mobileactivation_client_free() when done.
  */
 static int ma_session_start(device_info_t *dev, mobileactivation_client_t *ma)
 {
     mobileactivation_error_t err;
+    int attempt;
 
     if (!dev || !dev->handle || !ma) {
         log_error("%s NULL device or handle", LOG_TAG);
         return -1;
     }
 
-    err = mobileactivation_client_start_service(dev->handle, ma, "tr4mpass");
-    if (err != MOBILEACTIVATION_E_SUCCESS) {
-        log_error("%s Failed to start mobileactivation service (error %d)",
-                  LOG_TAG, (int)err);
-        return -1;
+    for (attempt = 1; attempt <= MA_START_ATTEMPTS; attempt++) {
+        err = mobileactivation_client_start_service(dev->handle, ma, "tr4mpass");
+        if (err == MOBILEACTIVATION_E_SUCCESS)
+            return 0;
+
+        log_warn("%s mobileactivation service not ready yet (error %d), "
+                 "attempt %d/%d", LOG_TAG, (int)err, attempt, MA_START_ATTEMPTS);
+        if (attempt < MA_START_ATTEMPTS)
+            usleep(MA_START_DELAY_USEC);
     }
 
-    return 0;
+    log_error("%s Failed to start mobileactivation service after %d attempts",
+              LOG_TAG, MA_START_ATTEMPTS);
+    return -1;
 }
 
 /*
