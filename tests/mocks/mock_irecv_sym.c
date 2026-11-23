@@ -66,8 +66,6 @@ irecv_error_t irecv_open_with_ecid(irecv_client_t *client, uint64_t ecid)
     c->info.pid      = (uint16_t)g_irecv_info_pid;
     c->info.ecid     = ecid != 0 ? ecid : g_irecv_info_ecid;
     c->info.cpid     = 0x8020;
-    c->info.have_ecid = 1;
-    c->info.have_cpid = 1;
     snprintf(c->serial_buf, sizeof(c->serial_buf), "%s",
              g_irecv_info_serial);
     c->info.serial_string = c->serial_buf;

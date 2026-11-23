@@ -28,9 +28,14 @@
 #include "device/usb_dfu.h"
 #include "util/log.h"
 
-/* Polling interval (2 s) and max wait for device mode transitions */
+/* Polling interval (2 s) and max wait for device mode transitions.
+ * ponytail: RECOVERY_WAIT_SECS is a calibration knob, not a hard spec --
+ * DFU_ABORT does not always kick A12+ into recovery on its own, and users
+ * often finish the transition with the manual button sequence (iss #18).
+ * 60s was too tight (one device landed at 52s); raise if slower devices
+ * or manual entry need more room. */
 #define REBOOT_POLL_USEC     2000000
-#define RECOVERY_WAIT_SECS   60
+#define RECOVERY_WAIT_SECS   120
 #define NORMAL_WAIT_SECS     90
 
 /* Apple USB IDs */
@@ -111,6 +116,8 @@ static int step_reboot_to_recovery(device_info_t *dev)
     dev->is_dfu_mode = 0;
 
     log_info("[path_b] DFU abort sent, waiting for recovery mode...");
+    log_info("[path_b] If it does not appear automatically, enter recovery "
+             "manually (hold the button sequence until the recovery screen).");
 
     if (libusb_init(&ctx) != LIBUSB_SUCCESS) {
         log_error("[path_b] libusb_init failed for recovery poll");

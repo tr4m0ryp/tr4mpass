@@ -1,7 +1,7 @@
 /*
  * test_path_b_e2e.c -- End-to-end Path B (A12+) pipeline tests.
  *
- * Two boundaries matter for Path B.  First, identity manipulation (DFU
+ * Two boundaries matter for Path B.  First, identity manipulation (recovery
  * read + recovery setenv) is expected to work on real hardware -- iBoot
  * accepts the PWND marker.  Second, activation itself is blocked by the
  * SEP nonce barrier documented in 26.3-vulnerability.md; FairPlayKeyData,
@@ -43,50 +43,6 @@
  * is arbitrary; the SUT only checks != MOBILEACTIVATION_E_SUCCESS. */
 #define E2E_MOBILEACTIVATION_E_NONCE_INVALID (-7)
 
-/* Build a USB string descriptor: [len, 0x03, UTF-16LE payload...]. */
-static size_t
-build_string_descriptor(const char *ascii, unsigned char *desc, size_t cap)
-{
-    size_t slen = strlen(ascii);
-    size_t i, pos;
-    desc[0] = (unsigned char)(2 + slen * 2);
-    desc[1] = 0x03;
-    pos = 2;
-    for (i = 0; i < slen && pos + 1 < cap; i++) {
-        desc[pos++] = (unsigned char)ascii[i];
-        desc[pos++] = 0x00;
-    }
-    return pos;
-}
-
-/*
- * Stage two descriptor reads for path_b_manipulate_identity():
- *   1. initial read returns the original serial,
- *   2. verify read returns original + " PWND:[checkm8]" (simulates the
- *      successful setenv having taken effect).
- */
-static void
-stage_usb_serial_descriptor(const char *ascii_serial)
-{
-    unsigned char desc[256];
-    unsigned char desc_after[256];
-    char modified[256];
-    size_t n1, n2;
-    snprintf(modified, sizeof(modified), "%s PWND:[checkm8]", ascii_serial);
-    n1 = build_string_descriptor(ascii_serial, desc,       sizeof(desc));
-    n2 = build_string_descriptor(modified,     desc_after, sizeof(desc_after));
-    mock_libusb_stage_control_transfer((int)n1, desc,       n1);
-    mock_libusb_stage_control_transfer((int)n2, desc_after, n2);
-}
-
-/* Static sentinel used as a non-null libusb_device_handle *. */
-static libusb_device_handle *
-fake_usb_handle(void)
-{
-    static int sentinel;
-    return (libusb_device_handle *)&sentinel;
-}
-
 /*
  * Identity manipulation happy path.  Asserts:
  *   - path_b_manipulate_identity returns 0,
@@ -108,9 +64,16 @@ test_path_b_e2e_identity_manipulation_succeeds(void)
 
     mock_reset_all();
     dev = e2e_make_device_path_b_cellular();
-    dev.usb = fake_usb_handle();
+    /*
+     * Real Step 2 state: step_reboot_to_recovery() has already put the
+     * device in recovery mode and released the DFU handle, so dev.usb is
+     * NULL here.  (The old test set a fake non-NULL dev.usb, which never
+     * happens in the real flow -- that masked the guard bug where
+     * path_b_manipulate_identity() rejected the recovery handle with
+     * "No USB handle for DFU mode".)  Serial is read via libirecovery.
+     */
+    dev.usb = NULL;
     mock_irecv_set_device_info(0x1281, dev.ecid, current_serial);
-    stage_usb_serial_descriptor(current_serial);
 
     rc = path_b_manipulate_identity(&dev);
     ASSERT_EQ(rc, 0);
