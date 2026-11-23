@@ -289,6 +289,14 @@ build_project() {
 # ------------------------------------------------------------------ #
 
 check_dfu() {
+    # Primary probe: irecovery talks to the DFU device via libusb directly.
+    # Newer macOS builds no longer list DFU devices in system_profiler, so
+    # keep this first and use the platform checks below as fallback.
+    if command -v irecovery >/dev/null 2>&1 &&
+       irecovery -q 2>/dev/null | grep -q "^MODE: DFU"; then
+        return 0
+    fi
+
     case "$DETECTED_OS" in
         macos)
             system_profiler SPUSBDataType 2>/dev/null | grep -q "0x1227"
@@ -498,8 +506,10 @@ parse_device_info() {
 
     DEV_MODEL="$(echo "$output" | grep "Product Type:" | sed 's/.*Product Type:[[:space:]]*//')"
     DEV_CHIP_NAME="$(echo "$output" | grep "Chip Name:" | sed 's/.*Chip Name:[[:space:]]*//')"
-    DEV_CPID="$(echo "$output" | grep "CPID:" | sed 's/.*CPID:[[:space:]]*//')"
-    DEV_ECID="$(echo "$output" | grep "ECID:" | sed 's/.*ECID:[[:space:]]*//')"
+    # Anchor to the labelled fields: the DFU serial descriptor also contains
+    # "CPID:"/"ECID:", so an unanchored grep produces multi-line garbage.
+    DEV_CPID="$(printf '%s\n' "$output" | sed -n 's/^[[:space:]]*CPID:[[:space:]]*//p' | head -n1)"
+    DEV_ECID="$(printf '%s\n' "$output" | sed -n 's/^[[:space:]]*ECID:[[:space:]]*//p' | head -n1)"
     DEV_IOS="$(echo "$output" | grep "iOS Version:" | sed 's/.*iOS Version:[[:space:]]*//')"
     DEV_SERIAL="$(echo "$output" | grep "Serial:" | sed 's/.*Serial:[[:space:]]*//')"
     DEV_IMEI="$(echo "$output" | grep "IMEI:" | sed 's/.*IMEI:[[:space:]]*//')"

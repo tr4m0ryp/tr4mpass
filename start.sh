@@ -150,7 +150,7 @@ main() {
     local has_cpid=0
     local has_ecid=0
     local arg
-    for arg in "${run_args[@]}"; do
+    for arg in ${run_args[@]+"${run_args[@]}"}; do
         case "$arg" in
             --cpid|--cpid=*) has_cpid=1 ;;
             --ecid|--ecid=*) has_ecid=1 ;;
@@ -166,7 +166,7 @@ main() {
     fi
 
     # Run binary (not exec so we can clean up usbipd afterwards).
-    "$BINARY" "${run_args[@]}"
+    "$BINARY" ${run_args[@]+"${run_args[@]}"}
     _rc=$?
     stop_usbipd_auto_attach
     exit $_rc

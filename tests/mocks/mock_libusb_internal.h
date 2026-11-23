@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <libusb-1.0/libusb.h>
+#include <libusb.h>
 
 struct libusb_context {
     uint32_t magic;
