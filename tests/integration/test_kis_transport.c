@@ -4,12 +4,16 @@
 
 #include "test_framework.h"
 
+#include "bypass/path_a.h"
+#include "bypass/path_b.h"
 #include "device/device.h"
 #include "device/kis_dfu.h"
 #include "mocks/mock_control.h"
 
 #include <stdint.h>
 #include <string.h>
+
+void run_cli_options_tests(void);
 
 #define KIS_TEST_CPID 0x8120u
 #define KIS_TEST_ECID UINT64_C(0x000A7DE22260201E)
@@ -147,6 +151,33 @@ static void test_kis_reboot_is_one_shot_and_transport_guarded(void)
     ASSERT_EQ(count_log_entries("irecv_reboot"), 0);
 }
 
+static void test_kis_path_selection(void)
+{
+    device_info_t dev;
+
+    printf("  [kis] selects Path B and never raw-DFU Path A\n");
+
+    memset(&dev, 0, sizeof(dev));
+    dev.is_dfu_mode = 1;
+    dev.transport = DEVICE_TRANSPORT_KIS_DFU;
+    dev.usb_product_id = 0x1881;
+    dev.boot_mode = 0x1227;
+    dev.checkm8_vulnerable = 0;
+
+    ASSERT_EQ(path_a_module.probe(&dev), 0);
+    ASSERT_EQ(path_b_module.probe(&dev), 1);
+
+    dev.checkm8_vulnerable = 1;
+    ASSERT_EQ(path_a_module.probe(&dev), 0);
+    ASSERT_EQ(path_b_module.probe(&dev), 0);
+
+    ASSERT_EQ(device_transport_allows_path_a(DEVICE_TRANSPORT_KIS_DFU), 0);
+
+    dev.transport = DEVICE_TRANSPORT_CLASSIC_DFU;
+    dev.usb_product_id = 0x1227;
+    ASSERT_EQ(path_a_module.probe(&dev), 1);
+}
+
 void run_kis_transport_tests(void)
 {
     printf("--- Section 13: KIS transport identity ---\n");
@@ -155,4 +186,6 @@ void run_kis_transport_tests(void)
     test_kis_open_failure_leaves_identity_unset();
     test_kis_reboot_requires_exact_ecid();
     test_kis_reboot_is_one_shot_and_transport_guarded();
+    test_kis_path_selection();
+    run_cli_options_tests();
 }

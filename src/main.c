@@ -28,6 +28,7 @@ typedef struct {
     int probe_albert;
     int force_path_a;
     int force_path_b;
+    int experimental_kis_transition;
     uint32_t cpid_override;
     uint64_t ecid_override;
     int has_cpid_override;
@@ -53,6 +54,8 @@ static void print_usage(const char *prog)
            "      --probe-albert     Dump IngestBody fields + drmHandshake only\n"
            "  -a, --force-path-a     Force Path A (checkm8, A5-A11)\n"
            "  -b, --force-path-b     Force Path B (identity, A12+)\n"
+           "      --experimental-kis-transition\n"
+           "                         Enable one experimental KIS reboot request\n"
            "      --cpid <hex>       Override CPID (e.g. --cpid 0x8960)\n"
            "      --ecid <hex>       Override ECID (e.g. --ecid 0x1F70CB1331C)\n"
            "  -h, --help             Show this help message\n\n",
@@ -67,6 +70,7 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         OPT_ECID          = 257,
         OPT_ACTIVATE_ONLY = 258,
         OPT_PROBE_ALBERT  = 259,
+        OPT_EXPERIMENTAL_KIS_TRANSITION = 260,
     };
 
     static const struct option longopts[] = {
@@ -75,6 +79,8 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         { "detect-only",    no_argument,       NULL, 'd' },
         { "activate-only",  no_argument,       NULL, OPT_ACTIVATE_ONLY },
         { "probe-albert",   no_argument,       NULL, OPT_PROBE_ALBERT  },
+        { "experimental-kis-transition", no_argument, NULL,
+          OPT_EXPERIMENTAL_KIS_TRANSITION },
         { "force-path-a",   no_argument,       NULL, 'a' },
         { "force-path-b",   no_argument,       NULL, 'b' },
         { "cpid",           required_argument, NULL, OPT_CPID },
@@ -103,6 +109,8 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
                   opts->activate_only  = 1; break;
         case OPT_PROBE_ALBERT:
                   opts->probe_albert   = 1; break;
+        case OPT_EXPERIMENTAL_KIS_TRANSITION:
+                  opts->experimental_kis_transition = 1; break;
         case 'a': opts->force_path_a   = 1; break;
         case 'b': opts->force_path_b   = 1; break;
         case OPT_CPID:
@@ -225,7 +233,15 @@ static void print_module_diagnostics(const device_info_t *dev)
 static const bypass_module_t *select_module(device_info_t *dev,
                                             const cli_opts_t *opts)
 {
-    if (opts->force_path_a) { log_info("Path A forced"); return &path_a_module; }
+    if (opts->force_path_a) {
+        if (!device_transport_allows_path_a(dev->transport)) {
+            log_error("Path A cannot be forced for %s transport",
+                      device_transport_name(dev->transport));
+            return NULL;
+        }
+        log_info("Path A forced");
+        return &path_a_module;
+    }
     if (opts->force_path_b) { log_info("Path B forced"); return &path_b_module; }
     const bypass_module_t *mod = bypass_select(dev);
     if (!mod) { print_module_diagnostics(dev); return NULL; }
@@ -276,6 +292,7 @@ int main(int argc, char *argv[])
         usb_dfu_cleanup();
         return 1;
     }
+    dev.experimental_kis_transition = opts.experimental_kis_transition;
 
     /*
      * Apply CLI overrides for CPID/ECID.  This runs after

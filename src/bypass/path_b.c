@@ -73,7 +73,10 @@ static int path_b_probe(device_info_t *dev)
         return 0;
     }
 
-    log_info("[path_b] A12+ device in DFU mode detected -- Path B compatible");
+    if (dev->transport == DEVICE_TRANSPORT_KIS_DFU)
+        log_info("[path_b] A12+ device in KIS DFU mode detected -- Path B compatible");
+    else
+        log_info("[path_b] A12+ device in classic DFU mode detected -- Path B compatible");
     return 1;
 }
 

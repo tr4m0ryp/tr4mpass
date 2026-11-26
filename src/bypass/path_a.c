@@ -44,7 +44,13 @@ path_a_probe(device_info_t *dev)
         return 0;
     }
 
-    log_info("path_a: device is eligible (checkm8-vulnerable, DFU mode)");
+    if (!device_transport_allows_path_a(dev->transport)) {
+        log_info("path_a: transport %s cannot use raw DFU Path A",
+                 device_transport_name(dev->transport));
+        return 0;
+    }
+
+    log_info("path_a: device is eligible (checkm8-vulnerable, classic DFU)");
     return 1;
 }
 
