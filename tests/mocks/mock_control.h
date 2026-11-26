@@ -124,6 +124,13 @@ void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
                                     uint32_t cpid, uint64_t ecid,
                                     const char *serial_string);
 
+/* Stage the error returned by irecv_reboot(). */
+void mock_irecv_set_reboot_error(int error_code);
+
+/* Stage successive irecv_get_mode() results.  The last value remains
+ * current after the sequence is exhausted. */
+void mock_irecv_set_mode_sequence(const int *modes, size_t count);
+
 /*
  * Force every subsequent irecv_open_* call to fail with the given error
  * code.  This is a sticky flag kept for backwards compatibility; new code

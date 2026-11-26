@@ -120,8 +120,16 @@ irecv_error_t irecv_get_mode(irecv_client_t client, int *mode)
     if (!client || !mode)
         return (irecv_error_t)-1;
     /* The physical USB PID and underlying boot mode are independent:
-     * KIS uses physical PID 0x1881 while carrying boot mode 0x1227. */
-    *mode = g_irecv_info_mode;
+     * KIS uses physical PID 0x1881 while carrying boot mode 0x1227.
+     * A staged sequence models successive mode observations; once it is
+     * exhausted, the last configured mode remains current. */
+    if (g_irecv_mode_sequence_index < g_irecv_mode_sequence_count) {
+        *mode = g_irecv_mode_sequence[g_irecv_mode_sequence_index++];
+    } else if (g_irecv_mode_sequence_count > 0) {
+        *mode = g_irecv_mode_sequence[g_irecv_mode_sequence_count - 1];
+    } else {
+        *mode = g_irecv_info_mode;
+    }
     return IRECV_E_SUCCESS;
 }
 
@@ -234,5 +242,5 @@ irecv_error_t irecv_reboot(irecv_client_t client)
 {
     (void)client;
     mock_log_append("irecv_reboot");
-    return (irecv_error_t)0;
+    return (irecv_error_t)g_irecv_reboot_error;
 }

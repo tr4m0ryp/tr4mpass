@@ -14,28 +14,22 @@
 #include <string.h>
 #include <unistd.h>
 #include <plist/plist.h>
-#include <libusb.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libirecovery.h>
 
 #include "bypass/path_b.h"
+#include "bypass/path_b_transition.h"
 #include "bypass/signal.h"
 #include "bypass/deletescript.h"
 #include "activation/activation.h"
 #include "activation/session.h"
 #include "activation/record.h"
 #include "device/device.h"
-#include "device/usb_dfu.h"
 #include "util/log.h"
 
-/* Polling interval (2 s) and max wait for device mode transitions */
+/* Polling interval (2 s) and max wait for normal-mode transition */
 #define REBOOT_POLL_USEC     2000000
-#define RECOVERY_WAIT_SECS   60
 #define NORMAL_WAIT_SECS     90
-
-/* Apple USB IDs */
-#define APPLE_VID_PATH_B     0x05AC
-#define RECOVERY_PID_PATH_B  0x1281
 
 /* Forward declarations for module callbacks. */
 static int path_b_probe(device_info_t *dev);
@@ -83,76 +77,18 @@ static int path_b_probe(device_info_t *dev)
 /*
  * step_reboot_to_recovery -- Step 1/10: transition device from DFU to
  * recovery mode so that iRecovery setenv commands become available.
- *
- * Sends a DFU_ABORT class request which causes the device to reset.
- * On A12+ this typically lands in recovery mode (PID 0x1281).
- * Polls for recovery mode appearance up to RECOVERY_WAIT_SECS seconds.
  */
 static int step_reboot_to_recovery(device_info_t *dev)
 {
-    libusb_context  *ctx = NULL;
-    libusb_device  **devs = NULL;
-    ssize_t          count;
-    ssize_t          i;
-    int              elapsed = 0;
-    int              found   = 0;
-
     log_info("[path_b] Step 1/10: Rebooting device from DFU to recovery mode...");
 
-    if (!dev->usb) {
-        log_error("[path_b] No USB handle -- device not in DFU mode");
-        return -1;
-    }
+    if (dev->transport == DEVICE_TRANSPORT_KIS_DFU)
+        return path_b_transition_to_recovery(dev, 120, 2);
+    if (dev->transport == DEVICE_TRANSPORT_CLASSIC_DFU)
+        return path_b_transition_to_recovery(dev, 60, 2);
 
-    /* DFU_ABORT: bmRequestType=0x21 (class, interface, host-to-device),
-     * bRequest=DFU_ABORT(6), wValue=0, wIndex=0, wLength=0 */
-    libusb_control_transfer(dev->usb, 0x21, 6, 0, 0, NULL, 0, 1000);
-
-    /* Release DFU handle -- device is resetting */
-    usb_dfu_close(dev->usb);
-    dev->usb         = NULL;
-    dev->is_dfu_mode = 0;
-
-    log_info("[path_b] DFU abort sent, waiting for recovery mode...");
-
-    if (libusb_init(&ctx) != LIBUSB_SUCCESS) {
-        log_error("[path_b] libusb_init failed for recovery poll");
-        return -1;
-    }
-
-    while (elapsed < RECOVERY_WAIT_SECS) {
-        usleep(REBOOT_POLL_USEC);
-        elapsed += 2;
-
-        count = libusb_get_device_list(ctx, &devs);
-        if (count < 0) {
-            libusb_free_device_list(devs, 1);
-            continue;
-        }
-
-        for (i = 0; i < count && !found; i++) {
-            struct libusb_device_descriptor desc;
-            if (libusb_get_device_descriptor(devs[i], &desc) != LIBUSB_SUCCESS)
-                continue;
-            if (desc.idVendor == APPLE_VID_PATH_B &&
-                desc.idProduct == RECOVERY_PID_PATH_B)
-                found = 1;
-        }
-
-        libusb_free_device_list(devs, 1);
-
-        if (found) {
-            log_info("[path_b] Recovery mode detected (%ds)", elapsed);
-            libusb_exit(ctx);
-            return 0;
-        }
-
-        log_debug("[path_b] Waiting for recovery... %ds / %ds",
-                  elapsed, RECOVERY_WAIT_SECS);
-    }
-
-    libusb_exit(ctx);
-    log_error("[path_b] Timed out waiting for recovery mode (%ds)", RECOVERY_WAIT_SECS);
+    log_error("[path_b] Unsupported DFU transport for Recovery transition: %s",
+              device_transport_name(dev->transport));
     return -1;
 }
 
