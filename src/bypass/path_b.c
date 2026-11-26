@@ -85,6 +85,11 @@ static int path_b_probe(device_info_t *dev)
  */
 static int step_reboot_to_recovery(device_info_t *dev)
 {
+    if (dev->transport == DEVICE_TRANSPORT_RECOVERY) {
+        log_info("[path_b] Step 1/10: Recovery already confirmed -- skipping transition");
+        return path_b_transition_to_recovery(dev, 0, 0);
+    }
+
     log_info("[path_b] Step 1/10: Rebooting device from DFU to recovery mode...");
 
     if (dev->transport == DEVICE_TRANSPORT_KIS_DFU)

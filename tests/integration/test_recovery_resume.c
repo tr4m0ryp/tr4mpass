@@ -207,6 +207,26 @@ static void test_recovery_transition_requires_confirmed_mode_and_ecid(void)
     ASSERT_EQ(count_log_entries("libusb_control_transfer"), 0);
 }
 
+static void test_recovery_resume_execution_reaches_identity_stage(void)
+{
+    device_info_t dev;
+    const char *serial =
+        "CPID:8120 CPRV:11 ECID:000A7DE22260201E IBFL:3D";
+
+    printf("  [recovery] execution reaches identity without transition reboot\n");
+
+    mock_reset_all();
+    init_confirmed_recovery_device(&dev);
+    mock_irecv_set_device_identity(0x1281, 0x1281, RECOVERY_TEST_CPID,
+                                   RECOVERY_TEST_ECID, serial);
+    mock_irecv_set_setenv_result("serial-number", -1);
+
+    ASSERT_EQ(path_b_module.execute(&dev), -1);
+    ASSERT_EQ(count_log_entries("irecv_setenv(serial-number"), 1);
+    ASSERT_EQ(count_log_entries("irecv_reboot"), 0);
+    ASSERT_EQ(count_log_entries("libusb_control_transfer"), 0);
+}
+
 void run_recovery_resume_tests(void)
 {
     printf("--- Section 14: Explicit Recovery resume ---\n");
@@ -218,4 +238,5 @@ void run_recovery_resume_tests(void)
     test_recovery_transport_selects_path_b();
     test_recovery_transition_is_skipped_without_reboot();
     test_recovery_transition_requires_confirmed_mode_and_ecid();
+    test_recovery_resume_execution_reaches_identity_stage();
 }
