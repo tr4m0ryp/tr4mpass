@@ -21,6 +21,10 @@
 extern int  g_ma_activate_error;
 extern int  g_ma_create_info_error;
 extern char g_ma_state[64];
+extern int  g_ma_start_service_error;
+extern int  g_ma_start_service_failures_left;
+extern int  g_ma_state_query_error;
+extern int  g_ma_state_query_failures_left;
 
 /* ------------------------------------------------------------------ */
 /* mobileactivation_*                                                 */
@@ -41,6 +45,13 @@ mobileactivation_client_start_service(idevice_t device,
     (void)device; (void)label;
     mock_log_append("mobileactivation_client_start_service");
     if (!client) return MOBILEACTIVATION_E_INVALID_ARG;
+
+    /* Consume a staged startup failure if one remains. */
+    if (g_ma_start_service_failures_left > 0) {
+        g_ma_start_service_failures_left--;
+        return (mobileactivation_error_t)g_ma_start_service_error;
+    }
+
     c = calloc(1, sizeof(*c));
     if (!c) return MOBILEACTIVATION_E_UNKNOWN_ERROR;
     c->magic = MA_MAGIC;
@@ -74,6 +85,14 @@ mobileactivation_get_activation_state(mobileactivation_client_t client,
     (void)client;
     mock_log_append("mobileactivation_get_activation_state");
     if (!state) return MOBILEACTIVATION_E_INVALID_ARG;
+
+    /* Consume a staged state-query failure if one remains. */
+    if (g_ma_state_query_failures_left > 0) {
+        g_ma_state_query_failures_left--;
+        *state = NULL;
+        return (mobileactivation_error_t)g_ma_state_query_error;
+    }
+
     *state = plist_new_string(g_ma_state);
     return MOBILEACTIVATION_E_SUCCESS;
 }

@@ -43,3 +43,8 @@ void run_recovery_resume_tests(void)
 {
     printf("--- Section 14: Explicit Recovery resume (skipped, run via test-mocks) ---\n");
 }
+
+void run_activation_online_tests(void)
+{
+    printf("--- Section 15: Activation online readiness (skipped, run via test-mocks) ---\n");
+}

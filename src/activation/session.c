@@ -143,6 +143,13 @@ int session_get_info(device_info_t *dev, plist_t *session_info)
 
     *session_info = NULL;
 
+    /* Bounded post-reboot readiness probe before requesting a session blob. */
+    if (activation_wait_ready(dev, ACTIVATION_READY_MAX_ATTEMPTS) < 0) {
+        log_error("%s Activation service not ready; refusing session request",
+                  LOG_TAG);
+        return -1;
+    }
+
     if (ma_session_start(dev, &ma) < 0)
         return -1;
 

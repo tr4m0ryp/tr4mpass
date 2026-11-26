@@ -47,6 +47,7 @@ int main(void)
     run_device_transport_tests();
     run_kis_transport_tests();
     run_recovery_resume_tests();
+    run_activation_online_tests();
 
     printf("===================\n");
     printf("Results: %d passed, %d failed\n", g_passes, g_failures);

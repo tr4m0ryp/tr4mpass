@@ -66,6 +66,29 @@ int activation_submit_record_with_session(device_info_t *dev,
 int activation_deactivate(device_info_t *dev);
 
 /*
+ * ACTIVATION_READY_MAX_ATTEMPTS -- Maximum number of readiness probe
+ * attempts used by activation_wait_ready() in production.  Each transient
+ * failure incurs a 2-second delay, so at most ~58 seconds of delay.
+ */
+#define ACTIVATION_READY_MAX_ATTEMPTS 30u
+
+/*
+ * activation_wait_ready -- Bounded post-reboot readiness probe for the
+ * mobileactivation service.
+ *
+ * On each attempt it starts com.apple.mobileactivationd and, if startup
+ * succeeds, queries the activation state.  Transient failures are retried
+ * up to max_attempts times (with a 2s delay between attempts in production,
+ * zero delay under UNIT_TEST).  MOBILEACTIVATION_E_INVALID_ARG,
+ * MOBILEACTIVATION_E_PLIST_ERROR, and MOBILEACTIVATION_E_UNKNOWN_REQUEST
+ * are permanent and cause an immediate -1 return.
+ *
+ * Returns 0 when a state query succeeds, -1 on invalid input or after
+ * exhausting max_attempts transient failures.
+ */
+int activation_wait_ready(device_info_t *dev, unsigned max_attempts);
+
+/*
  * activation_is_activated -- Check if the device is currently activated.
  * Returns 1 if activated, 0 if not activated, -1 on error.
  */

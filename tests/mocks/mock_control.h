@@ -254,6 +254,20 @@ void mock_mobileactivation_set_create_info_error(int error_code);
  */
 void mock_mobileactivation_set_state(const char *state);
 
+/*
+ * Stage `failure_count` failures of `error_code` for
+ * mobileactivation_client_start_service(), consumed one per call.
+ * Independent of the state-query failure staging.
+ */
+void mock_mobileactivation_set_start_service_failures(int error_code, int failure_count);
+
+/*
+ * Stage `failure_count` failures of `error_code` for
+ * mobileactivation_get_activation_state(), consumed one per call.
+ * Independent of the start-service failure staging.
+ */
+void mock_mobileactivation_set_state_query_failures(int error_code, int failure_count);
+
 /* ------------------------------------------------------------------ */
 /* libcurl staging                                                    */
 /* ------------------------------------------------------------------ */
