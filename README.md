@@ -58,6 +58,80 @@ The script will walk you through this, but here's the short version:
 
 ---
 
+## KIS DFU (Debug USB)
+
+Some A12-and-later devices expose their DFU boot mode through Apple's KIS/Debug USB interface. In that state, `lsusb` reports physical USB PID `05ac:1881`, while libirecovery reports the underlying boot mode as `0x1227`.
+
+**`05ac:1881` is KIS DFU, not classic raw DFU.** tr4mpass never sends classic DFU/checkm8 requests to this interface, and Path A is rejected even if it is forced.
+
+### Linux USB permissions
+
+The Apple USB node must be writable by the current user. The repository includes a udev rule for classic DFU (`05ac:1227`), Recovery (`05ac:1281`), and KIS (`05ac:1881`):
+
+```bash
+sudo install -m 0644 contrib/udev/99-tr4mpass.rules /etc/udev/rules.d/99-tr4mpass.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=usb --action=add
+```
+
+Unplug and reconnect the device if the permissions on its current `/dev/bus/usb/...` node do not change. The rule grants access to the `plugdev` group; confirm that your account is a member with `id -nG`. If needed, add it and log out and back in:
+
+```bash
+sudo usermod -aG plugdev "$USER"
+```
+
+### Detect without modifying the device
+
+```bash
+./tr4mpass --detect-only --verbose
+```
+
+For a KIS device, the report identifies the physical and underlying modes separately, for example:
+
+```text
+Transport: KIS DFU (Debug USB)
+Physical USB PID: 0x1881
+Underlying Boot Mode: 0x1227
+CPID: 0x8120
+ECID: 0x000A7DE22260201E
+```
+
+### Experimental Recovery transition
+
+A KIS-to-Recovery transition is experimental and is never attempted by an ordinary run. It requires this explicit command:
+
+```bash
+./start.sh --experimental-kis-transition
+```
+
+The program issues at most one KIS reboot request, closes the USB client, and then waits up to 120 seconds for libirecovery to confirm actual Recovery mode. It does not upload firmware, restore an IPSW, erase the device, write partitions, reset NVRAM, or write identity data before Recovery is confirmed.
+
+If the one-shot request is unsupported, enter Recovery physically while the program is waiting. For iPhone 8 or later, including Face ID models, Apple currently specifies:
+
+1. Press and quickly release the Volume Up button.
+2. Press and quickly release the Volume Down button.
+3. Press and hold the side button until the **Connect to computer** screen appears.
+
+See Apple's official [iPhone recovery-mode instructions](https://support.apple.com/en-us/118106).
+
+### Resume from physical Recovery
+
+If the phone is already in Recovery mode—for example, you entered it physically after the transition wait ended—resume Path B with the explicit recovery option:
+
+```bash
+# Inspect the confirmed Recovery device without writing to it
+./tr4mpass --resume-recovery --ecid <ECID> --dry-run --verbose
+
+# Continue the identity, reboot-to-normal, and activation stages
+./tr4mpass --resume-recovery --ecid <ECID> --verbose
+```
+
+`--ecid` is mandatory. tr4mpass opens that exact ECID through libirecovery and requires an actual Recovery mode (`0x1280..0x1283`); USB PID presence alone is not accepted. This mode never issues the experimental KIS reboot request. It skips only the already-completed DFU-to-Recovery transition, while preserving the exact-ECID identity write and the remaining Path B stages.
+
+> **iOS 26.6.2 limitation:** iOS 26.6.2 is beyond the project's verified Path B activation ceiling (currently iOS 26.1). A successful KIS-to-Recovery transition or identity step does not imply that the final activation bypass will succeed; the known Secure Enclave/activation-nonce barrier remains.
+
+---
+
 ## Supported Devices
 
 ### iPhone
@@ -230,7 +304,7 @@ DFU Mode -> identity manipulation -> signal detection
 
 ### Source Files
 
-The codebase is written in C99 (21 source files, 20 headers). Every file is under 300 lines. The Makefile auto-discovers all sources -- no manual file lists.
+The codebase is written in C99 (35 source files, 34 headers). New transport-focused modules are kept under 300 lines; the Makefile auto-discovers all sources -- no manual file lists.
 
 | Module | What it does |
 |--------|-------------|
