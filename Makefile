@@ -114,6 +114,7 @@ TEST_CFLAGS   = $(CFLAGS) -Iinclude -Itests -DUNIT_TEST
 
 test: $(TEST_TARGET)
 	./$(TEST_TARGET)
+	./tests/test_start_helpers.sh
 
 # The hw-independent target replaces the mock-only sections with empty
 # stubs so run_tests still finds run_ramdisk_tests / run_ssh_jailbreak_tests.

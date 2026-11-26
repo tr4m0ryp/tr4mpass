@@ -60,6 +60,8 @@ fi
 # ------------------------------------------------------------------ #
 
 main() {
+    local run_args=("$@")
+
     print_banner
     detect_os
     install_deps
@@ -97,11 +99,16 @@ main() {
             exit 1
         fi
 
+        local device_mode_label="DFU"
+        if [ "${DEVICE_USB_PID:-}" = "0x1881" ]; then
+            device_mode_label="KIS DFU (Debug USB)"
+        fi
+
         echo ""
         echo "========================================"
         echo "  Device Information"
         echo "========================================"
-        printf "  %-12s %s\n" "Mode:"   "DFU"
+        printf "  %-12s %s\n" "Mode:"   "$device_mode_label"
         printf "  %-12s %s\n" "Chip:"   "${DEV_CHIP_NAME:-(unknown)} (CPID: ${DEV_CPID:-(unknown)})"
         printf "  %-12s %s\n" "Bypass:" "$DEV_BYPASS"
         printf "  %-12s %s\n" "Status:" "$DEV_STATUS"
@@ -112,6 +119,13 @@ main() {
             msg_err "UNSUPPORTED: Device chip could not be identified or is not in the chip database."
             msg_info "This tool supports A5 through A17 chips."
             exit 1
+        fi
+
+        if ! validate_kis_transition_args "${run_args[@]}"; then
+            exit 1
+        fi
+        if [ "${DEVICE_USB_PID:-}" = "0x1881" ]; then
+            guide_recovery_faceid
         fi
 
         msg_ok "Device is supported. Ready to proceed."
@@ -146,7 +160,6 @@ main() {
     # In DFU mode on some WSL/usbipd stacks, descriptor reads can intermittently
     # fail even when lsusb still reports CPID/ECID.  If parse_device_info()
     # recovered fallback IDs, pass them explicitly unless caller already did.
-    local run_args=("$@")
     local has_cpid=0
     local has_ecid=0
     local arg

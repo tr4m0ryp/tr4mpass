@@ -289,19 +289,126 @@ build_project() {
 # ------------------------------------------------------------------ #
 
 check_dfu() {
+    local pid=""
+
+    DEVICE_USB_PID=""
     case "$DETECTED_OS" in
         macos)
-            system_profiler SPUSBDataType 2>/dev/null | grep -q "0x1227"
-            return $?
+            pid="$(
+                system_profiler SPUSBDataType 2>/dev/null |
+                awk '
+                    /Product ID:/ { product = $3 }
+                    /Vendor ID:/ {
+                        vendor = tolower($3)
+                        if (vendor == "0x05ac" &&
+                            (product == "0x1227" || product == "0x1881")) {
+                            print substr(product, 3)
+                            exit
+                        }
+                    }
+                '
+            )"
             ;;
         linux|wsl)
             if command -v lsusb >/dev/null 2>&1; then
-                lsusb 2>/dev/null | grep -q "05ac:1227"
-                return $?
+                pid="$(
+                    lsusb 2>/dev/null |
+                    awk '
+                        {
+                            for (field = 1; field <= NF; field++) {
+                                value = tolower($field)
+                                if (value ~ /^05ac:/) {
+                                    pair = substr(value, 6)
+                                    if (pair == "1227" || pair == "1881") {
+                                        print pair
+                                        exit
+                                    }
+                                }
+                            }
+                        }
+                    '
+                )"
             fi
-            return 1
             ;;
     esac
+
+    case "$pid" in
+        1227|1881)
+            DEVICE_USB_PID="0x$pid"
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+find_apple_usb_node() {
+    local node props
+
+    if [ -n "${APPLE_USB_NODE:-}" ]; then
+        printf '%s\n' "$APPLE_USB_NODE"
+        return 0
+    fi
+    if ! command -v udevadm >/dev/null 2>&1; then
+        return 1
+    fi
+
+    for node in /dev/bus/usb/*/*; do
+        [ -e "$node" ] || continue
+        props="$(udevadm info --query=property --name="$node" 2>/dev/null || true)"
+        if printf '%s\n' "$props" | grep -q '^ID_VENDOR_ID=05ac$' &&
+           printf '%s\n' "$props" | grep -q '^ID_MODEL_ID=\(1227\|1281\|1881\)$'; then
+            printf '%s\n' "$node"
+            return 0
+        fi
+    done
+    return 1
+}
+
+check_usb_permissions() {
+    local node
+
+    if [ "${DETECTED_OS:-}" = "macos" ]; then
+        return 0
+    fi
+
+    node="$(find_apple_usb_node || true)"
+    if [ -z "$node" ]; then
+        msg_warn "Apple USB node not found; skipping permission check."
+        return 0
+    fi
+
+    if [ -r "$node" ] && [ -w "$node" ]; then
+        msg_ok "Apple USB permissions are writable: $node"
+        return 0
+    fi
+
+    msg_err "Apple USB node is not writable by the current user: $node"
+    msg_info "Install the repository-owned udev rule (commands are not run automatically):"
+    msg_info "  sudo install -m 0644 \"$SCRIPT_DIR/contrib/udev/99-tr4mpass.rules\" /etc/udev/rules.d/99-tr4mpass.rules"
+    msg_info "  sudo udevadm control --reload-rules"
+    msg_info "  sudo udevadm trigger --subsystem-match=usb --action=add"
+    msg_info "Covered Apple USB PIDs: 1227, 1281, 1881"
+    msg_info "Unplug and reconnect the device if the current node permissions do not change."
+    return 1
+}
+
+validate_kis_transition_args() {
+    local arg
+
+    if [ "${DEVICE_USB_PID:-}" != "0x1881" ]; then
+        return 0
+    fi
+
+    for arg in "$@"; do
+        case "$arg" in
+            --detect-only|--dry-run|--dry-run=*|--experimental-kis-transition)
+                return 0
+                ;;
+        esac
+    done
+
+    msg_err "KIS DFU requires the explicit experimental transition option."
+    msg_info "Re-run with: ./start.sh --experimental-kis-transition"
     return 1
 }
 
@@ -423,6 +530,7 @@ wait_for_device() {
             DEVICE_MODE="dfu"
             echo ""
             msg_ok "Device detected in DFU mode!"
+            check_usb_permissions || true
             return 0
         fi
         if check_normal; then
@@ -450,13 +558,15 @@ parse_device_info() {
     local dfu_serial_fallback
 
     DEV_MODEL="" DEV_CHIP_NAME="" DEV_CPID="" DEV_ECID="" DEV_IOS=""
-    DEV_SERIAL="" DEV_IMEI="" DEV_CHECKM8="" DEV_DFU=""
+    DEV_SERIAL="" DEV_IMEI="" DEV_CHECKM8="" DEV_DFU="" DEV_TRANSPORT=""
     DEV_BYPASS="(none)"
     DEV_STATUS="UNSUPPORTED"
 
     # On Linux/WSL DFU, prefer lsusb directly so the wrapper does not
     # consume a libusb session before the real exploit starts.
-    if [ "$DEVICE_MODE" = "dfu" ] && command -v lsusb >/dev/null 2>&1; then
+    if [ "$DEVICE_MODE" = "dfu" ] &&
+       [ "${DEVICE_USB_PID:-}" = "0x1227" ] &&
+       command -v lsusb >/dev/null 2>&1; then
         dfu_serial_fallback="$(
             lsusb -v -d 05ac:1227 2>/dev/null |
             sed -n 's/.*iSerial[[:space:]]\+[0-9]\+[[:space:]]\+//p' |
@@ -467,6 +577,7 @@ parse_device_info() {
             DEV_CPID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*CPID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
             DEV_ECID="$(printf '%s\n' "$dfu_serial_fallback" | sed -n 's/.*ECID:\([0-9A-Fa-f]\+\).*/0x\1/p')"
             DEV_DFU="YES"
+            DEV_TRANSPORT="Classic DFU"
             msg_warn "Using DFU serial info from lsusb to avoid a pre-exploit libusb probe."
         fi
     fi
@@ -505,10 +616,16 @@ parse_device_info() {
     DEV_IMEI="$(echo "$output" | grep "IMEI:" | sed 's/.*IMEI:[[:space:]]*//')"
     DEV_CHECKM8="$(echo "$output" | grep "checkm8 vuln:" | sed 's/.*checkm8 vuln:[[:space:]]*//')"
     DEV_DFU="$(echo "$output" | grep "DFU Mode:" | sed 's/.*DFU Mode:[[:space:]]*//')"
+    DEV_TRANSPORT="$(echo "$output" | grep "Transport:" | sed 's/.*Transport:[[:space:]]*//')"
+
+    if [ "${DEVICE_USB_PID:-}" = "0x1881" ]; then
+        DEV_DFU="${DEV_TRANSPORT:-KIS DFU (Debug USB)}"
+    fi
 
     # Fallback: if libusb string descriptor reads time out, parse CPID/ECID
     # from lsusb's iSerial line so the exploit can proceed with --cpid/--ecid.
     if [ "$DEVICE_MODE" = "dfu" ] &&
+       [ "${DEVICE_USB_PID:-}" = "0x1227" ] &&
        { [ -z "$DEV_CPID" ] || [ "$DEV_CPID" = "0x0000" ]; } &&
        command -v lsusb >/dev/null 2>&1; then
         dfu_serial_fallback="$(
@@ -601,6 +718,16 @@ guide_dfu_faceid() {
     echo ""
 }
 
+guide_recovery_faceid() {
+    echo ""
+    msg_info "Recovery entry instructions (Face ID / no Home button device):"
+    echo ""
+    echo "  1. Quickly press and release Volume Up."
+    echo "  2. Quickly press and release Volume Down."
+    echo "  3. Press and hold Side until the \"Connect to computer\" screen appears."
+    echo ""
+}
+
 wait_for_dfu_entry() {
     local reason="$1"
     msg_warn "$reason"
@@ -622,6 +749,7 @@ wait_for_dfu_entry() {
         if check_dfu; then
             DEVICE_MODE="dfu"
             msg_ok "Device detected in DFU mode!"
+            check_usb_permissions || true
             return 0
         fi
         printf "\r${CYAN}[*]${RESET} Waiting for DFU... %ds / %ds" "$elapsed" "$timeout"
