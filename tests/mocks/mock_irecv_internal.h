@@ -60,6 +60,8 @@ extern int       g_irecv_open_error;   /* backwards-compat sticky flag */
 extern irecv_open_error_slot_t g_irecv_open_error_slots[IRECV_OPEN_ERROR_SLOTS];
 extern irecv_send_file_stage_t g_irecv_send_file_stages[IRECV_SEND_FILE_STAGES];
 extern uint32_t  g_irecv_info_pid;
+extern int       g_irecv_info_mode;
+extern uint32_t  g_irecv_info_cpid;
 extern uint64_t  g_irecv_info_ecid;
 extern char      g_irecv_info_serial[128];
 

@@ -8,6 +8,7 @@
 
 #include "tr4mpass.h"
 #include "device/device.h"
+#include "device/kis_dfu.h"
 #include "device/usb_dfu.h"
 #include "device/chip_db.h"
 #include "bypass/bypass.h"
@@ -153,7 +154,15 @@ static int detect_device(device_info_t *dev, const cli_opts_t *opts)
         dev->is_dfu_mode   = 1;
         dev->usb           = usb_handle;
         dev->iserial_index = iserial;
+        dev->transport       = DEVICE_TRANSPORT_CLASSIC_DFU;
+        dev->usb_product_id = DFU_PID;
+        dev->boot_mode       = DFU_PID;
         snprintf(dev->serial, sizeof(dev->serial), "%s", serial);
+        return 0;
+    }
+
+    if (kis_dfu_detect(dev) == 0) {
+        log_info("Device found in KIS DFU mode");
         return 0;
     }
 

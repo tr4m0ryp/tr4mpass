@@ -33,3 +33,8 @@ void run_path_b_integration_tests(void)
 {
     printf("--- Section 11: Path B E2E (skipped, run via test-mocks) ---\n");
 }
+
+void run_kis_transport_tests(void)
+{
+    printf("--- Section 13: KIS transport identity (skipped, run via test-mocks) ---\n");
+}

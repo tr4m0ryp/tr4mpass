@@ -116,6 +116,15 @@ void mock_irecv_set_device_info(uint32_t pid, uint64_t ecid,
                                 const char *serial_string);
 
 /*
+ * Configure the complete synthetic irecovery identity.  physical_pid is
+ * the USB product ID; mode is the underlying boot mode reported by
+ * irecv_get_mode().  KIS uses physical_pid=0x1881 and mode=0x1227.
+ */
+void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
+                                    uint32_t cpid, uint64_t ecid,
+                                    const char *serial_string);
+
+/*
  * Force every subsequent irecv_open_* call to fail with the given error
  * code.  This is a sticky flag kept for backwards compatibility; new code
  * should prefer mock_irecv_queue_open_error() for FIFO semantics.

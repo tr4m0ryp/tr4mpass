@@ -45,6 +45,7 @@ int main(void)
     run_path_a_integration_tests();
     run_path_b_integration_tests();
     run_device_transport_tests();
+    run_kis_transport_tests();
 
     printf("===================\n");
     printf("Results: %d passed, %d failed\n", g_passes, g_failures);

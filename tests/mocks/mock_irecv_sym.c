@@ -65,7 +65,7 @@ irecv_error_t irecv_open_with_ecid(irecv_client_t *client, uint64_t ecid)
     c->magic         = IRECV_MAGIC;
     c->info.pid      = (uint16_t)g_irecv_info_pid;
     c->info.ecid     = ecid != 0 ? ecid : g_irecv_info_ecid;
-    c->info.cpid     = 0x8020;
+    c->info.cpid     = g_irecv_info_cpid;
     c->info.have_ecid = 1;
     c->info.have_cpid = 1;
     snprintf(c->serial_buf, sizeof(c->serial_buf), "%s",
@@ -119,10 +119,9 @@ irecv_error_t irecv_get_mode(irecv_client_t client, int *mode)
     mock_log_append("irecv_get_mode");
     if (!client || !mode)
         return (irecv_error_t)-1;
-    /* Reflect the configured USB product ID: recovery PIDs live in
-     * 0x1280..0x1283, DFU is 0x1227. Callers compare against
-     * IRECV_K_RECOVERY_MODE_[1..4] which are the recovery PIDs. */
-    *mode = (int)g_irecv_info_pid;
+    /* The physical USB PID and underlying boot mode are independent:
+     * KIS uses physical PID 0x1881 while carrying boot mode 0x1227. */
+    *mode = g_irecv_info_mode;
     return IRECV_E_SUCCESS;
 }
 
