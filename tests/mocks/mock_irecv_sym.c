@@ -64,7 +64,7 @@ irecv_error_t irecv_open_with_ecid(irecv_client_t *client, uint64_t ecid)
         return (irecv_error_t)-2;
     c->magic         = IRECV_MAGIC;
     c->info.pid      = (uint16_t)g_irecv_info_pid;
-    c->info.ecid     = ecid != 0 ? ecid : g_irecv_info_ecid;
+    c->info.ecid     = g_irecv_info_ecid;
     c->info.cpid     = g_irecv_info_cpid;
     c->info.have_ecid = 1;
     c->info.have_cpid = 1;

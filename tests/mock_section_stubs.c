@@ -38,3 +38,8 @@ void run_kis_transport_tests(void)
 {
     printf("--- Section 13: KIS transport identity (skipped, run via test-mocks) ---\n");
 }
+
+void run_recovery_resume_tests(void)
+{
+    printf("--- Section 14: Explicit Recovery resume (skipped, run via test-mocks) ---\n");
+}

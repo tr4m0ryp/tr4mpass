@@ -60,5 +60,6 @@ void run_ssh_jailbreak_tests(void);
 void run_path_a_integration_tests(void);
 void run_path_b_integration_tests(void);
 void run_kis_transport_tests(void);
+void run_recovery_resume_tests(void);
 
 #endif /* TR4MPASS_TEST_FRAMEWORK_H */
