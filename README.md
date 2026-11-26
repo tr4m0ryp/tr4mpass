@@ -130,6 +130,18 @@ If the phone is already in Recovery mode—for example, you entered it physicall
 
 > **iOS 26.6.2 limitation:** iOS 26.6.2 is beyond the project's verified Path B activation ceiling (currently iOS 26.1). A successful KIS-to-Recovery transition or identity step does not imply that the final activation bypass will succeed; the known Secure Enclave/activation-nonce barrier remains.
 
+### Online activation readiness (normal mode)
+
+When run with `--activate-only` on a normal-mode device, tr4mpass talks to Apple's own activation service (Albert) through `mobileactivationd` without entering DFU, without writing identity data, and without submitting any activation record:
+
+- `mobileactivationd` readiness is retried up to 30 attempts at 2-second intervals after reboot;
+- `application/x-buddyml` from Albert means the original owner's credentials are required — it is an owner-credential boundary, not a bypass;
+- no credential form is submitted by tr4mpass;
+- the process exits nonzero while the device remains `Unactivated`;
+- iOS 26.6.2 remains beyond the verified Path B activation ceiling, and the known Secure Enclave/FairPlay nonce barrier is a separate constraint.
+
+Live A16 evidence for this behavior is recorded in [`26.3-vulnerability.md`](26.3-vulnerability.md).
+
 ---
 
 ## Supported Devices
@@ -304,7 +316,7 @@ DFU Mode -> identity manipulation -> signal detection
 
 ### Source Files
 
-The codebase is written in C99 (35 source files, 34 headers). New transport-focused modules are kept under 300 lines; the Makefile auto-discovers all sources -- no manual file lists.
+The codebase is written in C99 (37 source files, 35 headers). New transport-focused modules are kept under 300 lines; the Makefile auto-discovers all sources -- no manual file lists.
 
 | Module | What it does |
 |--------|-------------|
