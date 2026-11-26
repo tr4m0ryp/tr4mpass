@@ -24,6 +24,7 @@ uint64_t  g_irecv_info_ecid;
 char      g_irecv_info_serial[128] =
     "CPID:8020 CPRV:11 ECID:0012345678ABCDEF";
 int       g_irecv_reboot_error;
+int       g_irecv_saveenv_error;
 int       g_irecv_mode_sequence[IRECV_MODE_SEQUENCE_MAX];
 size_t    g_irecv_mode_sequence_count;
 size_t    g_irecv_mode_sequence_index;
@@ -51,6 +52,7 @@ void mock_irecv_reset(void)
     g_irecv_info_cpid            = 0x8020;
     g_irecv_info_ecid            = 0;
     g_irecv_reboot_error         = 0;
+    g_irecv_saveenv_error        = 0;
     g_irecv_mode_sequence_count  = 0;
     g_irecv_mode_sequence_index  = 0;
     memset(g_irecv_mode_sequence, 0, sizeof(g_irecv_mode_sequence));
@@ -115,6 +117,11 @@ void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
 void mock_irecv_set_reboot_error(int error_code)
 {
     g_irecv_reboot_error = error_code;
+}
+
+void mock_irecv_set_saveenv_error(int error_code)
+{
+    g_irecv_saveenv_error = error_code;
 }
 
 void mock_irecv_set_mode_sequence(const int *modes, size_t count)

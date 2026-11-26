@@ -235,7 +235,7 @@ irecv_error_t irecv_saveenv(irecv_client_t client)
 {
     (void)client;
     mock_log_append("irecv_saveenv");
-    return (irecv_error_t)0;
+    return (irecv_error_t)g_irecv_saveenv_error;
 }
 
 irecv_error_t irecv_reboot(irecv_client_t client)

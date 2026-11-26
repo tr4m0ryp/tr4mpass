@@ -127,6 +127,9 @@ void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
 /* Stage the error returned by irecv_reboot(). */
 void mock_irecv_set_reboot_error(int error_code);
 
+/* Stage the error returned by irecv_saveenv(). */
+void mock_irecv_set_saveenv_error(int error_code);
+
 /* Stage successive irecv_get_mode() results.  The last value remains
  * current after the sequence is exhausted. */
 void mock_irecv_set_mode_sequence(const int *modes, size_t count);

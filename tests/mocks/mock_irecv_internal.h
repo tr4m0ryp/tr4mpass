@@ -66,6 +66,7 @@ extern uint32_t  g_irecv_info_cpid;
 extern uint64_t  g_irecv_info_ecid;
 extern char      g_irecv_info_serial[128];
 extern int       g_irecv_reboot_error;
+extern int       g_irecv_saveenv_error;
 extern int       g_irecv_mode_sequence[IRECV_MODE_SEQUENCE_MAX];
 extern size_t    g_irecv_mode_sequence_count;
 extern size_t    g_irecv_mode_sequence_index;

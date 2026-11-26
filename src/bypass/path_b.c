@@ -2,7 +2,7 @@
  * path_b.c -- Path B bypass orchestration for A12+ devices.
  *
  * Orchestrates the full A12+ bypass flow:
- *   1. DFU identity manipulation (serial descriptor PWND marker)
+ *   1. Recovery identity environment manipulation (PWND marker)
  *   2. Signal type detection (cellular vs WiFi-only)
  *   3. drmHandshake session activation protocol
  *   4. Post-bypass deletescript cleanup
