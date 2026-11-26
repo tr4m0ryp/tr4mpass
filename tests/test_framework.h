@@ -48,6 +48,7 @@ void run_serial_parse_tests(void);
 void run_chip_db_tests(void);
 void run_bypass_probe_tests(void);
 void run_constant_tests(void);
+void run_device_transport_tests(void);
 
 /* Phase 2 placeholders (filled in by other agents) */
 void run_cert_extract_tests(void);

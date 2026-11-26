@@ -93,14 +93,14 @@ CHIP_DB_CANARY_BIN = tests/chip_db_canary.bin
 # No mocks, no real library linkage required for the SUT code.        #
 # ------------------------------------------------------------------ #
 
-TEST_UNITS  = src/device/chip_db.c src/bypass/bypass.c src/util/log.c \
-              src/util/env_config.c
+TEST_UNITS  = src/device/chip_db.c src/device/device_transport.c \
+              src/bypass/bypass.c src/util/log.c src/util/env_config.c
 
 # Sections linked by both `make test` (hw-independent) and `make test-mocks`.
 TEST_SECT_CORE = tests/test_main.c tests/test_parsing.c tests/test_chip_db.c \
                  tests/test_bypass_probe.c tests/test_constants.c \
                  tests/test_cert_extract.c tests/test_signer.c \
-                 tests/test_env_config.c
+                 tests/test_env_config.c tests/test_device_transport.c
 
 # Sections that require the mocked hardware libraries -- only used by
 # `make test-mocks`.  Include stub definitions of their entry points in

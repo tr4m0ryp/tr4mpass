@@ -13,6 +13,8 @@
 #include <libimobiledevice/lockdown.h>
 #include <libusb.h>
 
+#include "device/device_transport.h"
+
 #define DEVICE_FIELD_LEN 128
 #define DEVICE_UDID_LEN  64
 #define DEVICE_CHIP_NAME_LEN 32
@@ -60,6 +62,12 @@ typedef struct {
      * addition.
      */
     uint8_t iserial_index;
+
+    /* Transport metadata (appended for source-compatible growth). */
+    device_transport_t transport;
+    uint16_t usb_product_id;
+    uint16_t boot_mode;
+    int experimental_kis_transition;
 } device_info_t;
 
 /*
