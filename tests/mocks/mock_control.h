@@ -283,6 +283,20 @@ void mock_mobileactivation_set_state_query_failures(int error_code, int failure_
 void mock_curl_set_response(const char *url_substring, long http_code,
                             const void *body, size_t body_len);
 
+/*
+ * Stage a response for any curl_easy_perform whose URL contains
+ * url_substring, with an optional HTTP Content-Type string that the SUT
+ * can read back via CURLINFO_CONTENT_TYPE.  Pass content_type=NULL (or
+ * "") to stage a response with no content type, matching
+ * mock_curl_set_response().  Body is duplicated.  Multiple stagings may
+ * coexist; the first matching substring wins.
+ */
+void mock_curl_set_response_with_content_type(const char *url_substring,
+                                              long http_code,
+                                              const char *content_type,
+                                              const void *body,
+                                              size_t body_len);
+
 /* Return number of times curl_easy_perform has been called. */
 int mock_curl_get_perform_count(void);
 

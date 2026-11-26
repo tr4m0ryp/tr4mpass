@@ -47,11 +47,12 @@ struct mock_curl_easy {
 #define CURL_STAGE_SLOTS 16
 
 typedef struct {
-    int    in_use;
-    char   substr[512];
-    long   http_code;
-    void  *body;
-    size_t body_len;
+    int         in_use;
+    char        substr[512];
+    char        content_type[128];
+    long        http_code;
+    void       *body;
+    size_t      body_len;
 } curl_stage_t;
 
 static curl_stage_t g_curl_stages[CURL_STAGE_SLOTS];
@@ -69,8 +70,10 @@ void mock_curl_reset(void)
     g_last_url[0]   = '\0';
 }
 
-void mock_curl_set_response(const char *url_substring, long http_code,
-                            const void *body, size_t body_len)
+void mock_curl_set_response_with_content_type(const char *url_substring,
+                                              long http_code,
+                                              const char *content_type,
+                                              const void *body, size_t body_len)
 {
     int i;
     if (!url_substring)
@@ -79,6 +82,10 @@ void mock_curl_set_response(const char *url_substring, long http_code,
         if (!g_curl_stages[i].in_use) {
             curl_stage_t *s = &g_curl_stages[i];
             snprintf(s->substr, sizeof(s->substr), "%s", url_substring);
+            if (content_type && content_type[0])
+                snprintf(s->content_type, sizeof(s->content_type), "%s", content_type);
+            else
+                s->content_type[0] = '\0';
             s->http_code = http_code;
             s->body      = mock_memdup(body, body_len);
             s->body_len  = body_len;
@@ -86,6 +93,13 @@ void mock_curl_set_response(const char *url_substring, long http_code,
             return;
         }
     }
+}
+
+void mock_curl_set_response(const char *url_substring, long http_code,
+                            const void *body, size_t body_len)
+{
+    mock_curl_set_response_with_content_type(url_substring, http_code, NULL,
+                                             body, body_len);
 }
 
 int mock_curl_get_perform_count(void)
@@ -204,7 +218,7 @@ CURLcode curl_easy_perform(CURL *handle)
 
     stage = find_curl_stage(e->url);
     if (!stage) {
-        /* No staging: respond with empty 200. */
+        /* No staging: respond with empty 200, no content type. */
         e->last_http_code = 200;
         return CURLE_OK;
     }
@@ -224,6 +238,13 @@ CURLcode curl_easy_getinfo(CURL *handle, CURLINFO info, ...)
     if (e && info == CURLINFO_RESPONSE_CODE) {
         long *p = va_arg(ap, long *);
         if (p) *p = e->last_http_code;
+    } else if (e && info == CURLINFO_CONTENT_TYPE) {
+        char **p = va_arg(ap, char **);
+        if (p) {
+            curl_stage_t *s = find_curl_stage(e->url);
+            char *ct = s ? s->content_type : NULL;
+            *p = (ct && ct[0]) ? ct : NULL;
+        }
     }
     va_end(ap);
     return CURLE_OK;
