@@ -4,6 +4,9 @@
 
 #include "test_framework.h"
 
+#include "bypass/path_a.h"
+#include "bypass/path_b.h"
+#include "bypass/path_b_transition.h"
 #include "device/device.h"
 #include "device/recovery.h"
 #include "mocks/mock_control.h"
@@ -143,6 +146,67 @@ static void test_recovery_probe_open_failure_is_clean(void)
     ASSERT_EQ(dev.ecid, 0);
 }
 
+static void init_confirmed_recovery_device(device_info_t *dev)
+{
+    memset(dev, 0, sizeof(*dev));
+    dev->transport = DEVICE_TRANSPORT_RECOVERY;
+    dev->usb_product_id = 0x1281;
+    dev->boot_mode = 0x1281;
+    dev->is_dfu_mode = 0;
+    dev->cpid = RECOVERY_TEST_CPID;
+    dev->ecid = RECOVERY_TEST_ECID;
+    dev->checkm8_vulnerable = 0;
+    dev->usb = NULL;
+}
+
+static void test_recovery_transport_selects_path_b(void)
+{
+    device_info_t dev;
+
+    printf("  [recovery] confirmed Recovery selects Path B\n");
+
+    init_confirmed_recovery_device(&dev);
+    ASSERT_EQ(path_b_module.probe(&dev), 1);
+
+    dev.checkm8_vulnerable = 1;
+    dev.is_dfu_mode = 1;
+    ASSERT_EQ(path_a_module.probe(&dev), 0);
+}
+
+static void test_recovery_transition_is_skipped_without_reboot(void)
+{
+    device_info_t dev;
+
+    printf("  [recovery] confirmed Recovery skips the transition\n");
+
+    mock_reset_all();
+    init_confirmed_recovery_device(&dev);
+
+    ASSERT_EQ(path_b_transition_to_recovery(&dev, 3, 0), 0);
+    ASSERT_EQ(count_log_entries("irecv_reboot"), 0);
+    ASSERT_EQ(count_log_entries("libusb_control_transfer"), 0);
+    ASSERT_EQ(count_log_entries("irecv_open_with_ecid"), 0);
+}
+
+static void test_recovery_transition_requires_confirmed_mode_and_ecid(void)
+{
+    device_info_t dev;
+
+    printf("  [recovery] transition skip requires Recovery mode and exact ECID\n");
+
+    mock_reset_all();
+    init_confirmed_recovery_device(&dev);
+    dev.boot_mode = 0x1227;
+    ASSERT_EQ(path_b_transition_to_recovery(&dev, 3, 0), -1);
+
+    mock_reset_all();
+    init_confirmed_recovery_device(&dev);
+    dev.ecid = 0;
+    ASSERT_EQ(path_b_transition_to_recovery(&dev, 3, 0), -1);
+    ASSERT_EQ(count_log_entries("irecv_reboot"), 0);
+    ASSERT_EQ(count_log_entries("libusb_control_transfer"), 0);
+}
+
 void run_recovery_resume_tests(void)
 {
     printf("--- Section 14: Explicit Recovery resume ---\n");
@@ -151,4 +215,7 @@ void run_recovery_resume_tests(void)
     test_recovery_probe_rejects_non_recovery_modes();
     test_recovery_probe_rejects_ecid_mismatch();
     test_recovery_probe_open_failure_is_clean();
+    test_recovery_transport_selects_path_b();
+    test_recovery_transition_is_skipped_without_reboot();
+    test_recovery_transition_requires_confirmed_mode_and_ecid();
 }

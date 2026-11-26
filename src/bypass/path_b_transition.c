@@ -123,6 +123,20 @@ int path_b_transition_to_recovery(device_info_t *dev,
     if (!dev)
         return -1;
 
+    if (dev->transport == DEVICE_TRANSPORT_RECOVERY) {
+        if (dev->ecid == 0) {
+            log_error("[path_b] Recovery resume requires an exact ECID");
+            return -1;
+        }
+        if (!device_transport_is_recovery_mode(dev->boot_mode)) {
+            log_error("[path_b] Recovery resume requires confirmed Recovery "
+                      "mode (mode=0x%04X)", (unsigned)dev->boot_mode);
+            return -1;
+        }
+        log_info("[path_b] Recovery already confirmed -- skipping transition");
+        return 0;
+    }
+
     if (dev->transport == DEVICE_TRANSPORT_KIS_DFU)
         return transition_kis(dev, timeout_secs, poll_secs);
     if (dev->transport == DEVICE_TRANSPORT_CLASSIC_DFU)

@@ -61,7 +61,12 @@ static int path_b_probe(device_info_t *dev)
         return 0;
     }
 
-    /* Must be in DFU mode for identity manipulation */
+    if (dev->transport == DEVICE_TRANSPORT_RECOVERY) {
+        log_info("[path_b] A12+ device in Recovery mode detected -- Path B compatible");
+        return 1;
+    }
+
+    /* Classic DFU and KIS DFU must be in DFU mode for identity manipulation. */
     if (dev->is_dfu_mode != 1) {
         log_debug("[path_b] Device not in DFU mode, skipping");
         return 0;

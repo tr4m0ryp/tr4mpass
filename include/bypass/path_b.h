@@ -5,6 +5,10 @@
  * drmHandshake session activation -> deletescript cleanup -> verify.
  * Does NOT use a BootROM exploit -- works through identity
  * manipulation and the session-mode activation protocol.
+ *
+ * When the device is already in confirmed Recovery transport, only the
+ * DFU-to-Recovery transition is skipped. The exact-ECID identity write,
+ * Recovery-to-normal reboot, and activation stages still run normally.
  */
 
 #ifndef PATH_B_H
