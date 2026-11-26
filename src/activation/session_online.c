@@ -250,6 +250,28 @@ session_online_result_t session_device_activation_online(device_info_t *dev,
     return SESSION_ONLINE_SUCCESS;
 }
 
+const char *session_online_result_message(session_online_result_t result)
+{
+    switch (result) {
+    case SESSION_ONLINE_ACTIVATION_LOCK:
+        return "Activation Lock is still active. Albert returned an "
+               "owner-credential form. The device remains unactivated; "
+               "the original owner's Apple ID credentials are required, "
+               "and no activation record was submitted.";
+    case SESSION_ONLINE_SUCCESS:
+        return "Online activation succeeded; Albert issued an activation record.";
+    case SESSION_ONLINE_ERROR:
+    default:
+        return "Online activation failed: Albert did not return a valid "
+               "activation record.";
+    }
+}
+
+int session_online_result_exit_code(session_online_result_t result)
+{
+    return result == SESSION_ONLINE_SUCCESS ? 0 : 1;
+}
+
 /* ------------------------------------------------------------------ */
 /* Probe: dump IngestBody fields + drmHandshake only (no FMiP trigger) */
 /* ------------------------------------------------------------------ */

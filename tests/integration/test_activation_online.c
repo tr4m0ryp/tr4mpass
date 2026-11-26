@@ -363,6 +363,31 @@ static void test_albert_non_200_response_is_error(void)
     plist_free(activation_info);
 }
 
+static void test_session_online_owner_lock_message_is_explicit(void)
+{
+    const char *msg = session_online_result_message(SESSION_ONLINE_ACTIVATION_LOCK);
+
+    printf("  [online] owner-lock message is explicit\n");
+
+    ASSERT_NOTNULL(msg);
+    ASSERT_STRSTR(msg, "Activation Lock");
+    ASSERT_STRSTR(msg, "owner-credential form");
+    ASSERT_STRSTR(msg, "remains unactivated");
+    ASSERT_STRSTR(msg, "original owner's Apple ID credentials");
+    ASSERT_STRSTR(msg, "no activation record was submitted");
+    ASSERT(strstr(msg, "success") == NULL);
+    ASSERT(strstr(msg, "bypassed") == NULL);
+}
+
+static void test_session_online_exit_codes_distinguish_success(void)
+{
+    printf("  [online] exit codes distinguish success from failure\n");
+
+    ASSERT_EQ(session_online_result_exit_code(SESSION_ONLINE_SUCCESS), 0);
+    ASSERT_EQ(session_online_result_exit_code(SESSION_ONLINE_ACTIVATION_LOCK), 1);
+    ASSERT_EQ(session_online_result_exit_code(SESSION_ONLINE_ERROR), 1);
+}
+
 void run_activation_online_tests(void)
 {
     test_activation_wait_ready_retries_transient_startup_failures();
@@ -377,4 +402,6 @@ void run_activation_online_tests(void)
     test_albert_missing_content_type_with_valid_plist_succeeds();
     test_albert_malformed_plist_response_is_error();
     test_albert_non_200_response_is_error();
+    test_session_online_owner_lock_message_is_explicit();
+    test_session_online_exit_codes_distinguish_success();
 }

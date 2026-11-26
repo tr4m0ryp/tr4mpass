@@ -419,8 +419,22 @@ int main(int argc, char *argv[])
         if (session_get_info(&dev, &session_info) != 0)                          goto ao_done;
         if (session_drm_handshake_online(&dev, session_info, &hs_response) != 0) goto ao_done;
         if (session_create_activation_info(&dev, hs_response, &activ_info) != 0) goto ao_done;
-        if (session_device_activation_online(&dev, activ_info, &activ_record) != 0) goto ao_done;
-        if (session_activate(&dev, activ_record, hs_response) != 0)              goto ao_done;
+        session_online_result_t online_rc =
+            session_device_activation_online(&dev, activ_info, &activ_record);
+
+        if (online_rc == SESSION_ONLINE_ACTIVATION_LOCK) {
+            printf("%s\n", session_online_result_message(online_rc));
+            arc = session_online_result_exit_code(online_rc);
+            goto ao_done;
+        }
+        if (online_rc == SESSION_ONLINE_ERROR) {
+            printf("%s\n", session_online_result_message(online_rc));
+            arc = session_online_result_exit_code(online_rc);
+            goto ao_done;
+        }
+        /* SESSION_ONLINE_SUCCESS: continue to session_activate() and the
+         * independent state verification below. */
+        if (session_activate(&dev, activ_record, hs_response) != 0) goto ao_done;
 
         arc = activation_is_activated(&dev);
         if (arc == 1) {

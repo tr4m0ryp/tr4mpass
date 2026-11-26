@@ -102,6 +102,21 @@ session_online_result_t session_device_activation_online(device_info_t *dev,
                                                          plist_t *activation_record);
 
 /*
+ * session_online_result_message -- Human-readable message for a result.
+ * Returns a static string that must not be freed.  The activation-lock
+ * message names the required credentials and states that no activation
+ * record was submitted; it never contains "success" or "bypassed".
+ */
+const char *session_online_result_message(session_online_result_t result);
+
+/*
+ * session_online_result_exit_code -- CLI exit code for a result.
+ * Returns 0 only for SESSION_ONLINE_SUCCESS, and 1 for
+ * SESSION_ONLINE_ERROR and SESSION_ONLINE_ACTIVATION_LOCK.
+ */
+int session_online_result_exit_code(session_online_result_t result);
+
+/*
  * session_probe_albert -- Diagnostic probe: dump CollectionBlob IngestBody
  * fields and run only the drmHandshake stage against Albert.
  *
