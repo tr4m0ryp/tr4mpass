@@ -29,6 +29,18 @@
  * free with plist_free().
  * Returns 0 on success, -1 on error.
  */
+/*
+ * session_online_result -- Result of an online Albert activation stage.
+ * SESSION_ONLINE_ACTIVATION_LOCK means Albert returned an owner-credential
+ * form (application/x-buddyml) instead of an activation plist: the device
+ * is locked and no activation record can be produced from that response.
+ */
+typedef enum {
+    SESSION_ONLINE_ERROR = -1,
+    SESSION_ONLINE_SUCCESS = 0,
+    SESSION_ONLINE_ACTIVATION_LOCK = 1
+} session_online_result_t;
+
 int session_get_info(device_info_t *dev, plist_t *session_info);
 
 /*
@@ -79,11 +91,30 @@ int session_drm_handshake_online(device_info_t *dev, plist_t session_info,
  * URL-encodes activation_info as XML plist and POSTs to
  * albert.apple.com/deviceservices/deviceActivation.
  * On success, *activation_record is a new plist. Caller frees.
- * Returns 0 on success, -1 on error.
+ * Returns SESSION_ONLINE_SUCCESS when a valid activation record is parsed,
+ * SESSION_ONLINE_ACTIVATION_LOCK when Albert returns an owner-credential
+ * form (application/x-buddyml) instead, or SESSION_ONLINE_ERROR on
+ * transport or parse failure.  *activation_record is NULL for every
+ * non-success result.
  */
-int session_device_activation_online(device_info_t *dev,
-                                     plist_t activation_info,
-                                     plist_t *activation_record);
+session_online_result_t session_device_activation_online(device_info_t *dev,
+                                                         plist_t activation_info,
+                                                         plist_t *activation_record);
+
+/*
+ * session_online_result_message -- Human-readable message for a result.
+ * Returns a static string that must not be freed.  The activation-lock
+ * message names the required credentials and states that no activation
+ * record was submitted; it never contains "success" or "bypassed".
+ */
+const char *session_online_result_message(session_online_result_t result);
+
+/*
+ * session_online_result_exit_code -- CLI exit code for a result.
+ * Returns 0 only for SESSION_ONLINE_SUCCESS, and 1 for
+ * SESSION_ONLINE_ERROR and SESSION_ONLINE_ACTIVATION_LOCK.
+ */
+int session_online_result_exit_code(session_online_result_t result);
 
 /*
  * session_probe_albert -- Diagnostic probe: dump CollectionBlob IngestBody

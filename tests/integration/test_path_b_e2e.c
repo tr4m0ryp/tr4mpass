@@ -32,7 +32,6 @@
 #include "device/device.h"
 #include "mocks/mock_control.h"
 
-#include <libusb-1.0/libusb.h>
 #include <plist/plist.h>
 
 #include <stdio.h>
@@ -43,55 +42,14 @@
  * is arbitrary; the SUT only checks != MOBILEACTIVATION_E_SUCCESS. */
 #define E2E_MOBILEACTIVATION_E_NONCE_INVALID (-7)
 
-/* Build a USB string descriptor: [len, 0x03, UTF-16LE payload...]. */
-static size_t
-build_string_descriptor(const char *ascii, unsigned char *desc, size_t cap)
-{
-    size_t slen = strlen(ascii);
-    size_t i, pos;
-    desc[0] = (unsigned char)(2 + slen * 2);
-    desc[1] = 0x03;
-    pos = 2;
-    for (i = 0; i < slen && pos + 1 < cap; i++) {
-        desc[pos++] = (unsigned char)ascii[i];
-        desc[pos++] = 0x00;
-    }
-    return pos;
-}
-
 /*
- * Stage two descriptor reads for path_b_manipulate_identity():
- *   1. initial read returns the original serial,
- *   2. verify read returns original + " PWND:[checkm8]" (simulates the
- *      successful setenv having taken effect).
- */
-static void
-stage_usb_serial_descriptor(const char *ascii_serial)
-{
-    unsigned char desc[256];
-    unsigned char desc_after[256];
-    char modified[256];
-    size_t n1, n2;
-    snprintf(modified, sizeof(modified), "%s PWND:[checkm8]", ascii_serial);
-    n1 = build_string_descriptor(ascii_serial, desc,       sizeof(desc));
-    n2 = build_string_descriptor(modified,     desc_after, sizeof(desc_after));
-    mock_libusb_stage_control_transfer((int)n1, desc,       n1);
-    mock_libusb_stage_control_transfer((int)n2, desc_after, n2);
-}
-
-/* Static sentinel used as a non-null libusb_device_handle *. */
-static libusb_device_handle *
-fake_usb_handle(void)
-{
-    static int sentinel;
-    return (libusb_device_handle *)&sentinel;
-}
-
-/*
- * Identity manipulation happy path.  Asserts:
+ * Identity manipulation happy path.  Recovery has no raw DFU USB handle;
+ * the serial comes from libirecovery and the write is an iBoot environment
+ * update.  Asserts:
  *   - path_b_manipulate_identity returns 0,
  *   - irecv_setenv("serial-number", ...) contained "PWND:[checkm8]",
- *   - irecv_saveenv persisted the change.
+ *   - irecv_saveenv persisted the change,
+ *   - no USB descriptor transaction is attempted.
  */
 static void
 test_path_b_e2e_identity_manipulation_succeeds(void)
@@ -108,9 +66,13 @@ test_path_b_e2e_identity_manipulation_succeeds(void)
 
     mock_reset_all();
     dev = e2e_make_device_path_b_cellular();
-    dev.usb = fake_usb_handle();
-    mock_irecv_set_device_info(0x1281, dev.ecid, current_serial);
-    stage_usb_serial_descriptor(current_serial);
+    dev.usb = NULL;
+    dev.transport = DEVICE_TRANSPORT_RECOVERY;
+    dev.usb_product_id = 0x1281;
+    dev.boot_mode = 0x1281;
+    dev.is_dfu_mode = 0;
+    mock_irecv_set_device_identity(0x1281, 0x1281, dev.cpid, dev.ecid,
+                                   current_serial);
 
     rc = path_b_manipulate_identity(&dev);
     ASSERT_EQ(rc, 0);
@@ -126,6 +88,49 @@ test_path_b_e2e_identity_manipulation_succeeds(void)
     }
     ASSERT_EQ(found_pwnd,    1);
     ASSERT_EQ(found_saveenv, 1);
+    ASSERT_EQ(mock_call_log_contains("libusb_control_transfer"), 0);
+}
+
+static void
+test_path_b_e2e_identity_setenv_failure(void)
+{
+    device_info_t dev;
+
+    printf("  [e2e] path_b identity setenv failure\n");
+
+    mock_reset_all();
+    dev = e2e_make_device_path_b_cellular();
+    dev.usb = NULL;
+    dev.transport = DEVICE_TRANSPORT_RECOVERY;
+    dev.boot_mode = 0x1281;
+    dev.is_dfu_mode = 0;
+    mock_irecv_set_device_identity(0x1281, 0x1281, dev.cpid, dev.ecid,
+                                   "CPID:8020 CPRV:11 ECID:0022334455667788");
+    mock_irecv_set_setenv_result("serial-number", -1);
+
+    ASSERT_EQ(path_b_manipulate_identity(&dev), -1);
+    ASSERT_EQ(mock_call_log_contains("irecv_saveenv"), 0);
+}
+
+static void
+test_path_b_e2e_identity_saveenv_failure_is_nonfatal(void)
+{
+    device_info_t dev;
+
+    printf("  [e2e] path_b identity saveenv failure is non-fatal\n");
+
+    mock_reset_all();
+    dev = e2e_make_device_path_b_cellular();
+    dev.usb = NULL;
+    dev.transport = DEVICE_TRANSPORT_RECOVERY;
+    dev.boot_mode = 0x1281;
+    dev.is_dfu_mode = 0;
+    mock_irecv_set_device_identity(0x1281, 0x1281, dev.cpid, dev.ecid,
+                                   "CPID:8020 CPRV:11 ECID:0022334455667788");
+    mock_irecv_set_saveenv_error(-3);
+
+    ASSERT_EQ(path_b_manipulate_identity(&dev), 0);
+    ASSERT_EQ(mock_call_log_contains("irecv_saveenv"), 1);
 }
 
 /*
@@ -220,6 +225,8 @@ run_path_b_integration_tests(void)
 {
     printf("--- Section 11: Path B end-to-end integration ---\n");
     test_path_b_e2e_identity_manipulation_succeeds();
+    test_path_b_e2e_identity_setenv_failure();
+    test_path_b_e2e_identity_saveenv_failure_is_nonfatal();
     test_path_b_e2e_activation_rejected_by_nonce_barrier();
     test_path_b_e2e_signal_detection_cellular_vs_wifi();
 }

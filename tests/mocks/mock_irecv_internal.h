@@ -43,6 +43,7 @@ typedef struct {
 /* Phase 3: FIFO of staged irecv_open errors.  Each call to
  * irecv_open_with_ecid consumes one slot (or returns success if empty). */
 #define IRECV_OPEN_ERROR_SLOTS 8
+#define IRECV_MODE_SEQUENCE_MAX 32
 
 typedef struct {
     int error_code;
@@ -60,7 +61,14 @@ extern int       g_irecv_open_error;   /* backwards-compat sticky flag */
 extern irecv_open_error_slot_t g_irecv_open_error_slots[IRECV_OPEN_ERROR_SLOTS];
 extern irecv_send_file_stage_t g_irecv_send_file_stages[IRECV_SEND_FILE_STAGES];
 extern uint32_t  g_irecv_info_pid;
+extern int       g_irecv_info_mode;
+extern uint32_t  g_irecv_info_cpid;
 extern uint64_t  g_irecv_info_ecid;
 extern char      g_irecv_info_serial[128];
+extern int       g_irecv_reboot_error;
+extern int       g_irecv_saveenv_error;
+extern int       g_irecv_mode_sequence[IRECV_MODE_SEQUENCE_MAX];
+extern size_t    g_irecv_mode_sequence_count;
+extern size_t    g_irecv_mode_sequence_index;
 
 #endif /* TR4MPASS_MOCK_IRECV_INTERNAL_H */

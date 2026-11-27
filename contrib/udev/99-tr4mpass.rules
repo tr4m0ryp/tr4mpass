@@ -1,0 +1,5 @@
+# Repository-owned permissions for Apple DFU, Recovery, and KIS/Debug USB.
+# Install explicitly; the wrapper never changes host policy automatically.
+SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{idProduct}=="1227", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{idProduct}=="1281", MODE="0660", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{idProduct}=="1881", MODE="0660", GROUP="plugdev"

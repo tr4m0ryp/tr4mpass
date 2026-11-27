@@ -18,9 +18,16 @@ int       g_irecv_open_error;
 irecv_open_error_slot_t    g_irecv_open_error_slots[IRECV_OPEN_ERROR_SLOTS];
 irecv_send_file_stage_t    g_irecv_send_file_stages[IRECV_SEND_FILE_STAGES];
 uint32_t  g_irecv_info_pid  = 0x1281;
+int       g_irecv_info_mode = 0x1281;
+uint32_t  g_irecv_info_cpid = 0x8020;
 uint64_t  g_irecv_info_ecid;
 char      g_irecv_info_serial[128] =
     "CPID:8020 CPRV:11 ECID:0012345678ABCDEF";
+int       g_irecv_reboot_error;
+int       g_irecv_saveenv_error;
+int       g_irecv_mode_sequence[IRECV_MODE_SEQUENCE_MAX];
+size_t    g_irecv_mode_sequence_count;
+size_t    g_irecv_mode_sequence_index;
 
 void mock_irecv_reset(void)
 {
@@ -41,7 +48,14 @@ void mock_irecv_reset(void)
         memset(&g_irecv_send_file_stages[i], 0,
                sizeof(g_irecv_send_file_stages[i]));
     g_irecv_info_pid             = 0x1281;
+    g_irecv_info_mode            = 0x1281;
+    g_irecv_info_cpid            = 0x8020;
     g_irecv_info_ecid            = 0;
+    g_irecv_reboot_error         = 0;
+    g_irecv_saveenv_error        = 0;
+    g_irecv_mode_sequence_count  = 0;
+    g_irecv_mode_sequence_index  = 0;
+    memset(g_irecv_mode_sequence, 0, sizeof(g_irecv_mode_sequence));
     snprintf(g_irecv_info_serial, sizeof(g_irecv_info_serial), "%s",
              "CPID:8020 CPRV:11 ECID:0012345678ABCDEF");
 }
@@ -84,10 +98,47 @@ void mock_irecv_set_setenv_result(const char *var, int error_code)
 void mock_irecv_set_device_info(uint32_t pid, uint64_t ecid,
                                 const char *serial_string)
 {
-    g_irecv_info_pid  = pid;
+    mock_irecv_set_device_identity((uint16_t)pid, (int)pid,
+                                   0x8020u, ecid, serial_string);
+}
+
+void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
+                                    uint32_t cpid, uint64_t ecid,
+                                    const char *serial_string)
+{
+    g_irecv_info_pid  = physical_pid;
+    g_irecv_info_mode = mode;
+    g_irecv_info_cpid = cpid;
     g_irecv_info_ecid = ecid;
     snprintf(g_irecv_info_serial, sizeof(g_irecv_info_serial), "%s",
              serial_string ? serial_string : "");
+}
+
+void mock_irecv_set_reboot_error(int error_code)
+{
+    g_irecv_reboot_error = error_code;
+}
+
+void mock_irecv_set_saveenv_error(int error_code)
+{
+    g_irecv_saveenv_error = error_code;
+}
+
+void mock_irecv_set_mode_sequence(const int *modes, size_t count)
+{
+    size_t i;
+
+    g_irecv_mode_sequence_count = 0;
+    g_irecv_mode_sequence_index = 0;
+    memset(g_irecv_mode_sequence, 0, sizeof(g_irecv_mode_sequence));
+    if (!modes)
+        return;
+
+    if (count > IRECV_MODE_SEQUENCE_MAX)
+        count = IRECV_MODE_SEQUENCE_MAX;
+    for (i = 0; i < count; i++)
+        g_irecv_mode_sequence[i] = modes[i];
+    g_irecv_mode_sequence_count = count;
 }
 
 /*

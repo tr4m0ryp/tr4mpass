@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#include "device/device_transport.h"
 #include "device/usb_dfu.h"
 #include "util/usb_helpers.h"
 #include "util/log.h"
@@ -102,7 +103,9 @@ int usb_dfu_find(libusb_device_handle **handle, uint8_t *iserial_out)
         if (ret != LIBUSB_SUCCESS)
             continue;
 
-        if (desc.idVendor == APPLE_VID && desc.idProduct == DFU_PID) {
+        if (desc.idVendor == APPLE_VID &&
+            device_transport_from_usb_pid(desc.idProduct) ==
+                DEVICE_TRANSPORT_CLASSIC_DFU) {
             ret = libusb_open(devs[i], handle);
             if (ret != LIBUSB_SUCCESS) {
                 log_error("failed to open DFU device: %s",

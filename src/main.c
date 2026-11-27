@@ -8,6 +8,8 @@
 
 #include "tr4mpass.h"
 #include "device/device.h"
+#include "device/kis_dfu.h"
+#include "device/recovery.h"
 #include "device/usb_dfu.h"
 #include "device/chip_db.h"
 #include "bypass/bypass.h"
@@ -27,6 +29,8 @@ typedef struct {
     int probe_albert;
     int force_path_a;
     int force_path_b;
+    int experimental_kis_transition;
+    int resume_recovery;
     uint32_t cpid_override;
     uint64_t ecid_override;
     int has_cpid_override;
@@ -52,6 +56,10 @@ static void print_usage(const char *prog)
            "      --probe-albert     Dump IngestBody fields + drmHandshake only\n"
            "  -a, --force-path-a     Force Path A (checkm8, A5-A11)\n"
            "  -b, --force-path-b     Force Path B (identity, A12+)\n"
+           "      --experimental-kis-transition\n"
+           "                         Enable one experimental KIS reboot request\n"
+           "      --resume-recovery\n"
+           "                         Resume Path B from confirmed Recovery\n"
            "      --cpid <hex>       Override CPID (e.g. --cpid 0x8960)\n"
            "      --ecid <hex>       Override ECID (e.g. --ecid 0x1F70CB1331C)\n"
            "  -h, --help             Show this help message\n\n",
@@ -66,6 +74,8 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         OPT_ECID          = 257,
         OPT_ACTIVATE_ONLY = 258,
         OPT_PROBE_ALBERT  = 259,
+        OPT_EXPERIMENTAL_KIS_TRANSITION = 260,
+        OPT_RESUME_RECOVERY = 261,
     };
 
     static const struct option longopts[] = {
@@ -74,6 +84,9 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         { "detect-only",    no_argument,       NULL, 'd' },
         { "activate-only",  no_argument,       NULL, OPT_ACTIVATE_ONLY },
         { "probe-albert",   no_argument,       NULL, OPT_PROBE_ALBERT  },
+        { "experimental-kis-transition", no_argument, NULL,
+          OPT_EXPERIMENTAL_KIS_TRANSITION },
+        { "resume-recovery", no_argument,     NULL, OPT_RESUME_RECOVERY },
         { "force-path-a",   no_argument,       NULL, 'a' },
         { "force-path-b",   no_argument,       NULL, 'b' },
         { "cpid",           required_argument, NULL, OPT_CPID },
@@ -102,6 +115,10 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
                   opts->activate_only  = 1; break;
         case OPT_PROBE_ALBERT:
                   opts->probe_albert   = 1; break;
+        case OPT_EXPERIMENTAL_KIS_TRANSITION:
+                  opts->experimental_kis_transition = 1; break;
+        case OPT_RESUME_RECOVERY:
+                  opts->resume_recovery = 1; break;
         case 'a': opts->force_path_a   = 1; break;
         case 'b': opts->force_path_b   = 1; break;
         case OPT_CPID:
@@ -124,6 +141,22 @@ static int parse_args(int argc, char *argv[], cli_opts_t *opts)
         return -1;
     }
 
+    if (opts->resume_recovery) {
+        if (!opts->has_ecid_override || opts->ecid_override == 0) {
+            log_error("--resume-recovery requires an explicit non-zero --ecid");
+            return -1;
+        }
+        if (opts->force_path_a) {
+            log_error("--resume-recovery cannot be combined with --force-path-a");
+            return -1;
+        }
+        if (opts->experimental_kis_transition) {
+            log_error("--resume-recovery cannot be combined with "
+                      "--experimental-kis-transition");
+            return -1;
+        }
+    }
+
     return 0;
 }
 
@@ -132,6 +165,16 @@ static int detect_device(device_info_t *dev, const cli_opts_t *opts)
     libusb_device_handle *usb_handle = NULL;
     uint8_t iserial = 0;
     memset(dev, 0, sizeof(*dev));
+
+    if (opts && opts->resume_recovery) {
+        if (recovery_detect_exact(dev, opts->ecid_override) < 0) {
+            log_error("Recovery resume requested, but the exact device "
+                      "could not be confirmed in Recovery mode");
+            return -1;
+        }
+        log_info("Device found in Recovery mode");
+        return 0;
+    }
 
     if (usb_dfu_find(&usb_handle, &iserial) == 0) {
         log_info("Device found in DFU mode (iSerial index: %u)",
@@ -153,7 +196,15 @@ static int detect_device(device_info_t *dev, const cli_opts_t *opts)
         dev->is_dfu_mode   = 1;
         dev->usb           = usb_handle;
         dev->iserial_index = iserial;
+        dev->transport       = DEVICE_TRANSPORT_CLASSIC_DFU;
+        dev->usb_product_id = DFU_PID;
+        dev->boot_mode       = DFU_PID;
         snprintf(dev->serial, sizeof(dev->serial), "%s", serial);
+        return 0;
+    }
+
+    if (kis_dfu_detect(dev) == 0) {
+        log_info("Device found in KIS DFU mode");
         return 0;
     }
 
@@ -216,7 +267,23 @@ static void print_module_diagnostics(const device_info_t *dev)
 static const bypass_module_t *select_module(device_info_t *dev,
                                             const cli_opts_t *opts)
 {
-    if (opts->force_path_a) { log_info("Path A forced"); return &path_a_module; }
+    if (opts->resume_recovery) {
+        if (dev->transport != DEVICE_TRANSPORT_RECOVERY) {
+            log_error("Recovery resume requires confirmed Recovery transport");
+            return NULL;
+        }
+        log_info("Path B selected for Recovery resume");
+        return &path_b_module;
+    }
+    if (opts->force_path_a) {
+        if (!device_transport_allows_path_a(dev->transport)) {
+            log_error("Path A cannot be forced for %s transport",
+                      device_transport_name(dev->transport));
+            return NULL;
+        }
+        log_info("Path A forced");
+        return &path_a_module;
+    }
     if (opts->force_path_b) { log_info("Path B forced"); return &path_b_module; }
     const bypass_module_t *mod = bypass_select(dev);
     if (!mod) { print_module_diagnostics(dev); return NULL; }
@@ -267,6 +334,7 @@ int main(int argc, char *argv[])
         usb_dfu_cleanup();
         return 1;
     }
+    dev.experimental_kis_transition = opts.experimental_kis_transition;
 
     /*
      * Apply CLI overrides for CPID/ECID.  This runs after
@@ -351,8 +419,22 @@ int main(int argc, char *argv[])
         if (session_get_info(&dev, &session_info) != 0)                          goto ao_done;
         if (session_drm_handshake_online(&dev, session_info, &hs_response) != 0) goto ao_done;
         if (session_create_activation_info(&dev, hs_response, &activ_info) != 0) goto ao_done;
-        if (session_device_activation_online(&dev, activ_info, &activ_record) != 0) goto ao_done;
-        if (session_activate(&dev, activ_record, hs_response) != 0)              goto ao_done;
+        session_online_result_t online_rc =
+            session_device_activation_online(&dev, activ_info, &activ_record);
+
+        if (online_rc == SESSION_ONLINE_ACTIVATION_LOCK) {
+            printf("%s\n", session_online_result_message(online_rc));
+            arc = session_online_result_exit_code(online_rc);
+            goto ao_done;
+        }
+        if (online_rc == SESSION_ONLINE_ERROR) {
+            printf("%s\n", session_online_result_message(online_rc));
+            arc = session_online_result_exit_code(online_rc);
+            goto ao_done;
+        }
+        /* SESSION_ONLINE_SUCCESS: continue to session_activate() and the
+         * independent state verification below. */
+        if (session_activate(&dev, activ_record, hs_response) != 0) goto ao_done;
 
         arc = activation_is_activated(&dev);
         if (arc == 1) {

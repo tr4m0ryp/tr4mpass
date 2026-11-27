@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <curl/curl.h>
 #include "compat/plist_compat.h"
@@ -18,6 +19,8 @@
 struct resp_buf {
     uint8_t *data;
     size_t   len;
+    char     content_type[128];
+    long     http_status;
 };
 
 static size_t write_cb(void *ptr, size_t size, size_t nmemb, void *ud)
@@ -62,15 +65,27 @@ static int http_post(const char *url,
 
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    char *remote_ct = NULL;
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &remote_ct);
+    out->http_status = http_code;
+    if (remote_ct) {
+        snprintf(out->content_type, sizeof(out->content_type), "%s", remote_ct);
+    } else {
+        out->content_type[0] = '\0';
+    }
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
     if (rc != CURLE_OK) {
-        log_error("[session_online] curl error: %s", curl_easy_strerror(rc));
+        log_error("[session_online] curl error: %s (HTTP %ld, content-type %s)",
+                  curl_easy_strerror(rc), out->http_status,
+                  out->content_type[0] ? out->content_type : "(none)");
         return -1;
     }
     if (http_code != 200) {
-        log_error("[session_online] HTTP %ld from %s", http_code, url);
+        log_error("[session_online] HTTP %ld from %s (content-type %s)",
+                  http_code, url,
+                  out->content_type[0] ? out->content_type : "(none)");
         if (out->data && out->len > 0)
             log_debug("[session_online] Error body: %.*s",
                       (int)(out->len < 512 ? out->len : 512), out->data);
@@ -84,7 +99,7 @@ int session_drm_handshake_online(device_info_t *dev, plist_t session_info,
 {
     char    *xml     = NULL;
     uint32_t xml_len = 0;
-    struct resp_buf resp = {NULL, 0};
+    struct resp_buf resp = {NULL, 0, {0}, 0};
 
     (void)dev;
 
@@ -129,7 +144,30 @@ int session_drm_handshake_online(device_info_t *dev, plist_t session_info,
     return 0;
 }
 
-int session_device_activation_online(device_info_t *dev,
+/*
+ * Case-insensitive MIME comparison: trims surrounding whitespace, drops
+ * parameters after ';', and never reads past the end of ct.
+ */
+static int ct_matches_mime(const char *ct, const char *mime)
+{
+    if (!ct || !mime)
+        return 0;
+
+    while (*ct == ' ' || *ct == '\t' || *ct == '\r' || *ct == '\n')
+        ct++;
+
+    const char *sem = strchr(ct, ';');
+    size_t len = sem ? (size_t)(sem - ct) : strlen(ct);
+    while (len > 0 && (ct[len - 1] == ' ' || ct[len - 1] == '\t' ||
+                       ct[len - 1] == '\r' || ct[len - 1] == '\n'))
+        len--;
+
+    if (strlen(mime) != len)
+        return 0;
+    return strncasecmp(ct, mime, len) == 0;
+}
+
+session_online_result_t session_device_activation_online(device_info_t *dev,
                                      plist_t activation_info,
                                      plist_t *activation_record)
 {
@@ -138,37 +176,37 @@ int session_device_activation_online(device_info_t *dev,
     char    *encoded = NULL;
     char    *body    = NULL;
     size_t   body_len;
-    struct resp_buf resp = {NULL, 0};
+    struct resp_buf resp = {NULL, 0, {0}, 0};
     CURL    *curl_esc;
 
     (void)dev;
 
     if (!activation_info || !activation_record) {
         log_error("[session_online] NULL args to device_activation_online");
-        return -1;
+        return SESSION_ONLINE_ERROR;
     }
     *activation_record = NULL;
 
     plist_to_xml(activation_info, &xml, &xml_len);
     if (!xml || xml_len == 0) {
         log_error("[session_online] Failed to serialize activation_info");
-        return -1;
+        return SESSION_ONLINE_ERROR;
     }
 
     curl_esc = curl_easy_init();
-    if (!curl_esc) { free(xml); return -1; }
+    if (!curl_esc) { free(xml); return SESSION_ONLINE_ERROR; }
     encoded = curl_easy_escape(curl_esc, xml, (int)xml_len);
     curl_easy_cleanup(curl_esc);
     free(xml);
 
     if (!encoded) {
         log_error("[session_online] URL-encode of activation_info failed");
-        return -1;
+        return SESSION_ONLINE_ERROR;
     }
 
     body_len = strlen("activation-info=") + strlen(encoded);
     body = malloc(body_len + 1);
-    if (!body) { curl_free(encoded); return -1; }
+    if (!body) { curl_free(encoded); return SESSION_ONLINE_ERROR; }
     snprintf(body, body_len + 1, "activation-info=%s", encoded);
     curl_free(encoded);
 
@@ -178,23 +216,60 @@ int session_device_activation_online(device_info_t *dev,
                   "application/x-www-form-urlencoded", &resp) != 0) {
         free(body);
         free(resp.data);
-        return -1;
+        return SESSION_ONLINE_ERROR;
     }
     free(body);
 
-    log_info("[session_online] Got %zu bytes from deviceActivation", resp.len);
+    log_info("[session_online] Got %zu bytes from deviceActivation "
+             "(HTTP %ld, content-type %s)", resp.len, resp.http_status,
+             resp.content_type[0] ? resp.content_type : "(none)");
+
+    /* Albert answers a locked device with an owner-credential form
+     * (application/x-buddyml), not an activation plist.  Classify it as
+     * an activation lock and never synthesize a record from it. */
+    if (ct_matches_mime(resp.content_type, "application/x-buddyml")) {
+        log_info("[session_online] HTTP %ld: Albert returned an owner-credential "
+                 "form (content-type %s) -- activation lock, no plist parsed",
+                 resp.http_status, resp.content_type);
+        free(resp.data);
+        return SESSION_ONLINE_ACTIVATION_LOCK;
+    }
 
     tp_plist_from_memory((const char *)resp.data, (uint32_t)resp.len,
                       activation_record, NULL);
     free(resp.data);
 
     if (!*activation_record) {
-        log_error("[session_online] Failed to parse deviceActivation response");
-        return -1;
+        log_error("[session_online] HTTP %ld: Failed to parse deviceActivation "
+                  "response (content-type %s)", resp.http_status,
+                  resp.content_type[0] ? resp.content_type : "(none)");
+        return SESSION_ONLINE_ERROR;
     }
 
     log_info("[session_online] deviceActivation OK (online)");
-    return 0;
+    return SESSION_ONLINE_SUCCESS;
+}
+
+const char *session_online_result_message(session_online_result_t result)
+{
+    switch (result) {
+    case SESSION_ONLINE_ACTIVATION_LOCK:
+        return "Activation Lock is still active. Albert returned an "
+               "owner-credential form. The device remains unactivated; "
+               "the original owner's Apple ID credentials are required, "
+               "and no activation record was submitted.";
+    case SESSION_ONLINE_SUCCESS:
+        return "Online activation succeeded; Albert issued an activation record.";
+    case SESSION_ONLINE_ERROR:
+    default:
+        return "Online activation failed: Albert did not return a valid "
+               "activation record.";
+    }
+}
+
+int session_online_result_exit_code(session_online_result_t result)
+{
+    return result == SESSION_ONLINE_SUCCESS ? 0 : 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,7 +343,7 @@ int session_probe_albert(device_info_t *dev, plist_t session_info)
 {
     char    *xml     = NULL;
     uint32_t xml_len = 0;
-    struct resp_buf resp = {NULL, 0};
+    struct resp_buf resp = {NULL, 0, {0}, 0};
     plist_t  hs_resp = NULL;
 
     (void)dev;

@@ -48,6 +48,7 @@ void run_serial_parse_tests(void);
 void run_chip_db_tests(void);
 void run_bypass_probe_tests(void);
 void run_constant_tests(void);
+void run_device_transport_tests(void);
 
 /* Phase 2 placeholders (filled in by other agents) */
 void run_cert_extract_tests(void);
@@ -58,5 +59,8 @@ void run_ssh_jailbreak_tests(void);
 /* Phase 3 integration sections (mock-only) */
 void run_path_a_integration_tests(void);
 void run_path_b_integration_tests(void);
+void run_kis_transport_tests(void);
+void run_recovery_resume_tests(void);
+void run_activation_online_tests(void);
 
 #endif /* TR4MPASS_TEST_FRAMEWORK_H */

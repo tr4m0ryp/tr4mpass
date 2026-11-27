@@ -116,6 +116,25 @@ void mock_irecv_set_device_info(uint32_t pid, uint64_t ecid,
                                 const char *serial_string);
 
 /*
+ * Configure the complete synthetic irecovery identity.  physical_pid is
+ * the USB product ID; mode is the underlying boot mode reported by
+ * irecv_get_mode().  KIS uses physical_pid=0x1881 and mode=0x1227.
+ */
+void mock_irecv_set_device_identity(uint16_t physical_pid, int mode,
+                                    uint32_t cpid, uint64_t ecid,
+                                    const char *serial_string);
+
+/* Stage the error returned by irecv_reboot(). */
+void mock_irecv_set_reboot_error(int error_code);
+
+/* Stage the error returned by irecv_saveenv(). */
+void mock_irecv_set_saveenv_error(int error_code);
+
+/* Stage successive irecv_get_mode() results.  The last value remains
+ * current after the sequence is exhausted. */
+void mock_irecv_set_mode_sequence(const int *modes, size_t count);
+
+/*
  * Force every subsequent irecv_open_* call to fail with the given error
  * code.  This is a sticky flag kept for backwards compatibility; new code
  * should prefer mock_irecv_queue_open_error() for FIFO semantics.
@@ -235,6 +254,20 @@ void mock_mobileactivation_set_create_info_error(int error_code);
  */
 void mock_mobileactivation_set_state(const char *state);
 
+/*
+ * Stage `failure_count` failures of `error_code` for
+ * mobileactivation_client_start_service(), consumed one per call.
+ * Independent of the state-query failure staging.
+ */
+void mock_mobileactivation_set_start_service_failures(int error_code, int failure_count);
+
+/*
+ * Stage `failure_count` failures of `error_code` for
+ * mobileactivation_get_activation_state(), consumed one per call.
+ * Independent of the start-service failure staging.
+ */
+void mock_mobileactivation_set_state_query_failures(int error_code, int failure_count);
+
 /* ------------------------------------------------------------------ */
 /* libcurl staging                                                    */
 /* ------------------------------------------------------------------ */
@@ -249,6 +282,20 @@ void mock_mobileactivation_set_state(const char *state);
  */
 void mock_curl_set_response(const char *url_substring, long http_code,
                             const void *body, size_t body_len);
+
+/*
+ * Stage a response for any curl_easy_perform whose URL contains
+ * url_substring, with an optional HTTP Content-Type string that the SUT
+ * can read back via CURLINFO_CONTENT_TYPE.  Pass content_type=NULL (or
+ * "") to stage a response with no content type, matching
+ * mock_curl_set_response().  Body is duplicated.  Multiple stagings may
+ * coexist; the first matching substring wins.
+ */
+void mock_curl_set_response_with_content_type(const char *url_substring,
+                                              long http_code,
+                                              const char *content_type,
+                                              const void *body,
+                                              size_t body_len);
 
 /* Return number of times curl_easy_perform has been called. */
 int mock_curl_get_perform_count(void);

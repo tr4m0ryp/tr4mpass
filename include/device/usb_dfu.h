@@ -8,7 +8,10 @@
 /* Apple USB identifiers */
 #define APPLE_VID       0x05AC
 #define DFU_PID         0x1227
+#define KIS_PID         0x1881
 #define RECOVERY_PID    0x1281
+#define RECOVERY_PID_MIN 0x1280
+#define RECOVERY_PID_MAX 0x1283
 
 /* DFU class-specific requests */
 #define DFU_DNLOAD      1

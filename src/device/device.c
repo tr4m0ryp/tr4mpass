@@ -264,7 +264,7 @@ void device_print_info(const device_info_t *dev)
 
     /* New fields */
     printf("  CPID:             0x%04X\n", dev->cpid);
-    printf("  ECID:             0x%llX\n", (unsigned long long)dev->ecid);
+    printf("  ECID:             0x%016llX\n", (unsigned long long)dev->ecid);
     printf("  Chip Name:        %s\n",
            dev->chip_name[0] ? dev->chip_name : "(unknown)");
     printf("  checkm8 vuln:     %s\n",
@@ -273,6 +273,9 @@ void device_print_info(const device_info_t *dev)
            dev->is_cellular ? "YES" : "NO (WiFi-only)");
     printf("  DFU Mode:         %s\n",
            dev->is_dfu_mode ? "YES" : "NO");
+    printf("  Transport:        %s\n", device_transport_name(dev->transport));
+    printf("  Physical USB PID: 0x%04X\n", dev->usb_product_id);
+    printf("  Underlying Boot Mode: 0x%04X\n", dev->boot_mode);
     printf("-------------------------\n\n");
 }
 
